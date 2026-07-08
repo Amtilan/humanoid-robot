@@ -1,0 +1,250 @@
+# ---------------------------------------------------------------------------
+# humanoid-robot — root workspace configuration.
+#
+# This file is intentionally *not* a distributable package. It exists to:
+#   - declare the uv workspace and its members (apps/*, packages/*, plugins/*)
+#   - centralise tool configuration (ruff, mypy, pytest, coverage, importlinter,
+#     commitizen) so every member inherits the same rules
+#
+# Individual workspace members (packages/*, apps/*, plugins/*) each ship their
+# own `pyproject.toml` describing that distribution.
+# ---------------------------------------------------------------------------
+
+[project]
+name = "humanoid-robot"
+version = "0.0.0"
+description = "Offline-first AI platform for autonomous humanoid robots."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "humanoid-robot contributors" }]
+
+# The root project has no runtime dependencies — it is a metadata/workspace
+# holder. Real dependencies live inside workspace members.
+dependencies = []
+
+[dependency-groups]
+# Dev-only dependencies shared across the entire workspace.
+dev = [
+    "ruff>=0.9.0",
+    "mypy>=1.13.0",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "hypothesis>=6.115.0",
+    "pre-commit>=4.0.0",
+    "import-linter>=2.1",
+    "commitizen>=3.30",
+    "types-PyYAML>=6.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*", "apps/*", "plugins/*"]
+exclude = ["web/**"]
+
+# ---------------------------------------------------------------------------
+# Ruff — lint + format. Replaces black, isort, flake8, autoflake, pyupgrade.
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".venv", "build", "dist", "node_modules"]
+
+[tool.ruff.lint]
+# Curated set: pycodestyle E/W, pyflakes F, isort I, pyupgrade UP, bugbear B,
+# comprehensions C4, simplify SIM, typing TCH, pytest style PT, security S,
+# annotations ANN, complexity C90, docstring parts D, ruff-specific RUF.
+select = [
+    "E", "W", "F", "I", "UP", "B", "C4", "SIM", "PT", "S",
+    "ANN", "C90", "RUF", "PL", "PIE", "TRY", "PERF", "N",
+]
+ignore = [
+    # Line length handled by formatter, not lint (avoid noisy conflicts).
+    "E501",
+    # Docstring rules — enable per-package as it matures, do not gate whole tree.
+    "D",
+    # TRY003: allow raising exceptions with descriptive messages.
+    "TRY003",
+    # PLR0913: too many arguments — pydantic models legitimately have many.
+    "PLR0913",
+    # TC001/TC002/TC003 push runtime-needed annotations into TYPE_CHECKING
+    # blocks — pydantic v2 requires them at runtime, so these are disabled.
+    "TC001", "TC002", "TC003",
+    # PLR0402 forces `from a import b` even when `import a.b as b` is the only
+    # form mypy accepts under our PEP-420 namespace package layout.
+    "PLR0402",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may use assert, magic values, and long parametrise blocks.
+"**/tests/**/*.py" = ["S101", "PLR2004", "ANN"]
+"**/conftest.py" = ["S101", "ANN"]
+# Enums often reuse names like `PASS` / `EXPIRED` — not secrets.
+"**/domain/**/models.py" = ["S105"]
+# `__init__.py` re-exports are naturally alphabetically-unsortable across
+# subpackages; ruff isort tries to reorder them and thrash the file.
+"**/__init__.py" = ["I001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["humanoid_robot"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 88
+
+# ---------------------------------------------------------------------------
+# mypy — strict typing on domain/ports/events; looser on adapters where 3rd-
+# party libraries lack stubs. Per-package overrides go in each pyproject.toml.
+# ---------------------------------------------------------------------------
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unreachable = true
+disallow_untyped_decorators = true
+show_error_codes = true
+pretty = true
+plugins = ["pydantic.mypy"]
+# Workspace uses PEP-420 namespace packages under `humanoid_robot.*`.
+# `mypy_path` tells mypy where each namespace root lives so it does not see the
+# same file under two module paths.
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = [
+    "packages/humanoid-robot-domain/src",
+    "packages/humanoid-robot-events/src",
+    "packages/humanoid-robot-ports/src",
+    "packages/humanoid-robot-testing/src",
+]
+exclude = [
+    "^\\.venv/",
+    "^build/",
+    "^dist/",
+]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# ---------------------------------------------------------------------------
+# pytest — asyncio auto, coverage, parallelism-friendly defaults.
+# ---------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+asyncio_mode = "auto"
+# `importlib` mode lets us have multiple `tests/` directories across workspace
+# members without inserting them into `sys.path` — collisions like
+# `packages/a/tests/test_x.py` vs `packages/b/tests/test_x.py` become fine.
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--tb=short",
+    "--import-mode=importlib",
+]
+testpaths = ["packages", "apps", "plugins"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "unit: fast, isolated unit tests (default)",
+    "integration: touches real infrastructure (NATS, Qdrant, filesystem)",
+    "hardware: requires physical robot / audio hardware",
+    "slow: takes > 1 second",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:pydantic.*",
+]
+
+[tool.coverage.run]
+source = ["packages", "apps"]
+branch = true
+parallel = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 80
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "@overload",
+]
+
+# ---------------------------------------------------------------------------
+# Import-Linter — enforces the Clean Architecture dependency rule.
+# ---------------------------------------------------------------------------
+
+[tool.importlinter]
+root_packages = ["humanoid_robot"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Domain has no infrastructure dependencies"
+type = "forbidden"
+source_modules = ["humanoid_robot.domain"]
+forbidden_modules = [
+    "humanoid_robot.adapters",
+    "fastapi",
+    "starlette",
+    "sqlalchemy",
+    "qdrant_client",
+    "nats",
+]
+
+[[tool.importlinter.contracts]]
+name = "Ports depend only on domain"
+type = "forbidden"
+source_modules = ["humanoid_robot.ports"]
+forbidden_modules = [
+    "humanoid_robot.adapters",
+    "humanoid_robot.application",
+    "fastapi",
+    "starlette",
+]
+
+[[tool.importlinter.contracts]]
+name = "Events depend only on stdlib + pydantic"
+type = "forbidden"
+source_modules = ["humanoid_robot.events"]
+forbidden_modules = [
+    "humanoid_robot.adapters",
+    "humanoid_robot.application",
+    "humanoid_robot.ports",
+    "fastapi",
+    "starlette",
+]
+
+# ---------------------------------------------------------------------------
+# Commitizen — conventional commits + semver.
+# ---------------------------------------------------------------------------
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.0.0"
+tag_format = "v$version"
+version_scheme = "semver"
+version_files = [
+    "pyproject.toml:^version",
+]
+update_changelog_on_bump = true

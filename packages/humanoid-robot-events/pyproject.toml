@@ -1,0 +1,21 @@
+[project]
+name = "humanoid-robot-events"
+version = "0.0.0"
+description = "Event catalog and versioned schemas for humanoid-robot."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "pydantic>=2.9",
+    "humanoid-robot-domain",
+]
+
+[tool.uv.sources]
+humanoid-robot-domain = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/humanoid_robot"]

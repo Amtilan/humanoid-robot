@@ -1,0 +1,102 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least-privilege by default; individual jobs opt into more.
+permissions:
+  contents: read
+
+jobs:
+  quality-gates:
+    name: quality-gates (${{ matrix.check }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [ruff-lint, ruff-format, mypy, importlinter, pytest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.11.11"
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            uv.lock
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Sync workspace
+        run: uv sync --all-packages --dev
+
+      - name: Run check — ruff lint
+        if: matrix.check == 'ruff-lint'
+        run: uv run ruff check .
+
+      - name: Run check — ruff format
+        if: matrix.check == 'ruff-format'
+        run: uv run ruff format --check .
+
+      - name: Run check — mypy
+        if: matrix.check == 'mypy'
+        run: uv run mypy packages
+
+      - name: Run check — import-linter
+        if: matrix.check == 'importlinter'
+        run: uv run lint-imports
+
+      - name: Run check — pytest
+        if: matrix.check == 'pytest'
+        run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage
+        if: matrix.check == 'pytest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  pre-commit:
+    name: pre-commit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.11.11"
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --all-packages --dev
+      - run: uv run pre-commit run --all-files --show-diff-on-failure
+
+  security-scan:
+    name: security-scan
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          exit-code: "1"

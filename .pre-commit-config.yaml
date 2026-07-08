@@ -1,0 +1,54 @@
+# Run: `uv run pre-commit install` once, then commits are gated automatically.
+# CI runs `pre-commit run --all-files` as a separate job (see .github/workflows/ci.yaml).
+
+default_language_version:
+  python: python3.12
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+        args: ["--unsafe"]  # allow custom tags (e.g. github actions)
+      - id: check-json
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.0
+    hooks:
+      - id: ruff
+        args: ["--fix", "--exit-non-zero-on-fix"]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        # mypy in pre-commit runs in isolated env — declare stubs it needs.
+        additional_dependencies:
+          - pydantic>=2.9
+          - types-PyYAML
+        args: ["--config-file=pyproject.toml"]
+        # Fast pre-commit: only check strict-typed packages; full sweep in CI.
+        files: ^packages/(humanoid-robot-domain|humanoid-robot-events|humanoid-robot-ports)/
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: (^\.secrets\.baseline$|^web/.*/pnpm-lock\.yaml$)
+
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.30.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]

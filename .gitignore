@@ -5,7 +5,7 @@ __pycache__/
 
 # C extensions
 *.so
-
+.import_linter_cache
 # Distribution / packaging
 .Python
 build/
@@ -216,3 +216,66 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---------------------------------------------------------------------------
+# humanoid-robot: project-specific
+# ---------------------------------------------------------------------------
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+!.vscode/settings.json.example
+!.vscode/extensions.json
+
+# Node / web
+node_modules/
+web/**/dist/
+web/**/.next/
+web/**/.cache/
+web/**/.turbo/
+.pnpm-store/
+
+# Local state — never commit
+/var/
+/tmp/
+/logs/
+*.log.*
+
+# Model artifacts (managed by model-repository, not git)
+/models/
+/data/
+/kb/
+*.gguf
+*.onnx
+*.trt
+*.engine
+*.pt
+*.pth
+*.bin.safetensors
+*.safetensors
+
+# Secrets — SOPS-encrypted files are OK, plaintext must never land in git
+*.dec.yaml
+*.dec.json
+*.secret
+secrets.plain.*
+
+# Docker / compose overrides
+docker-compose.override.yaml
+docker-compose.override.yml
+.env.local
+
+# uv
+# We keep uv.lock committed for reproducibility of apps; libraries may need to
+# revisit this per package.
+# uv.lock
+
+# Coverage reports
+coverage.xml
+.coverage
+htmlcov/
+
