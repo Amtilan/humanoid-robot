@@ -89,6 +89,10 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # gitleaks diffs the pushed commit range, so it needs full history;
+          # the default shallow clone makes the range an "unknown revision".
+          fetch-depth: 0
       - name: gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
