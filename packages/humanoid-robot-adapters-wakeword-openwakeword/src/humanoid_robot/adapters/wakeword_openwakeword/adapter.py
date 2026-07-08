@@ -112,7 +112,7 @@ class OpenWakeWord:
         )
 
         def _predict(samples: list[int]) -> dict[str, float]:
-            import numpy as np  # noqa: PLC0415 — runtime-optional dep
+            import numpy as np
 
             arr = np.array(samples, dtype=np.int16)
             prediction = model.predict(arr)

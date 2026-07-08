@@ -22,14 +22,18 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.0
+    # Keep this rev aligned with the ruff version resolved by uv into `.venv`
+    # (see `dev` dependency-group in pyproject.toml). Version drift between
+    # the pre-commit hook and the local ruff will surface as "unused noqa"
+    # diffs — see the audit trail in git history for the last such fix.
+    rev: v0.15.20
     hooks:
       - id: ruff
         args: ["--fix", "--exit-non-zero-on-fix"]
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
+    rev: v1.15.0
     hooks:
       - id: mypy
         # mypy in pre-commit runs in isolated env — declare stubs it needs.

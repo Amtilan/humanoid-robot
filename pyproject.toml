@@ -78,6 +78,11 @@ ignore = [
     # PLR0402 forces `from a import b` even when `import a.b as b` is the only
     # form mypy accepts under our PEP-420 namespace package layout.
     "PLR0402",
+    # PLC0415 (imports inside functions) — adapter modules deliberately import
+    # optional runtime deps (numpy, onnxruntime, faster_whisper, piper,
+    # silero_vad, openwakeword) lazily so the package imports cleanly on
+    # laptops without those native libraries.
+    "PLC0415",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -89,11 +94,9 @@ ignore = [
 # `__init__.py` re-exports are naturally alphabetically-unsortable across
 # subpackages; ruff isort tries to reorder them and thrash the file.
 "**/__init__.py" = ["I001"]
-# Typer relies on `typer.Option(...)` as function default; PLC0415 lazy imports
-# are intentional inside FastAPI/uvicorn entrypoints to keep startup fast and
-# avoid circular imports.
+# Typer relies on `typer.Option(...)` as function default; use of B008 is
+# the standard Typer/Click idiom.
 "apps/core/src/humanoid_robot/core/__main__.py" = ["B008"]
-"apps/core/src/humanoid_robot/core/app.py" = ["PLC0415"]
 "apps/robot-adapter/src/humanoid_robot/robot_adapter_app/__main__.py" = ["B008"]
 # Adapter and plugin factories must accept arbitrary kwargs by design — the
 # concrete shape is defined by each adapter's own settings model.
@@ -113,6 +116,13 @@ ignore = [
 "packages/humanoid-robot-adapters-tts-piper/src/humanoid_robot/adapters/tts_piper/adapter.py" = ["ANN401"]
 "packages/humanoid-robot-adapters-vad-silero/src/humanoid_robot/adapters/vad_silero/adapter.py" = ["ANN401"]
 "packages/humanoid-robot-adapters-wakeword-openwakeword/src/humanoid_robot/adapters/wakeword_openwakeword/adapter.py" = ["ANN401"]
+"apps/voice/src/humanoid_robot/voice/__main__.py" = ["B008"]
+"apps/voice/src/humanoid_robot/voice/composition.py" = ["ANN401"]
+# G1 downmix path uses a small numeric constant literally; pinning it to a
+# named constant hurts readability of the copy loop.
+"packages/humanoid-robot-adapters-unitree-g1/src/humanoid_robot/adapters/unitree_g1/audio_in.py" = ["PLR2004"]
+# Test contract-style suites use assert extensively.
+"packages/humanoid-robot-adapters-audio-alsa/tests/test_alsa.py" = ["S101"]
 # HITL and one-shot scripts use broad exception handling by design.
 "scripts/hitl_voice_smoke.py" = ["BLE001", "RUF100", "TRY300", "TRY400"]
 # Contract-test helpers legitimately use `assert` — that's their whole job.
@@ -169,6 +179,7 @@ mypy_path = [
     "packages/humanoid-robot-adapters-tts-piper/src",
     "packages/humanoid-robot-adapters-vad-silero/src",
     "packages/humanoid-robot-adapters-wakeword-openwakeword/src",
+    "packages/humanoid-robot-adapters-audio-alsa/src",
     "apps/core/src",
     "apps/robot-adapter/src",
     "apps/voice/src",

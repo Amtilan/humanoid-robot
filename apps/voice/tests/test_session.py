@@ -193,7 +193,7 @@ class TestVoiceSessionWakeWord:
         assert "speech.wake_word.triggered" in subjects
         assert "asr.final" not in subjects
         # Verify the state came back to IDLE.
-        from humanoid_robot.voice import VoiceSessionState  # noqa: PLC0415
+        from humanoid_robot.voice import VoiceSessionState
 
         assert session.state == VoiceSessionState.IDLE
         # silence WakeWordTriggered event object exists

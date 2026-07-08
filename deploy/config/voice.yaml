@@ -1,0 +1,56 @@
+# Reference configuration for cortex-voice.
+#
+# Copy to /etc/humanoid-robot/voice.yaml and edit for your hardware.
+# Environment variables HR_VOICE__* override any value defined here.
+
+environment: prod
+service_name: cortex-voice
+log_level: INFO
+
+nats:
+  servers:
+    - nats://127.0.0.1:4222
+  client_name: cortex-voice
+
+session:
+  language_hint: ru
+  min_speech_ms: 200
+  silence_hang_ms: 600
+  max_utterance_ms: 10000
+  require_wake_word: false
+  wake_word_grace_ms: 1500
+
+# Which adapter to load for each port. Names refer to entry_points registered
+# by the installed adapter distributions.
+stack:
+  audio_in:
+    name: alsa
+    config:
+      device: plughw:2,0
+      sample_rate_hz: 16000
+      channels: 1
+      frame_ms: 50
+  audio_out:
+    # cortex-voice does not ship a first-class audio_out adapter yet — the
+    # Unitree G1 speaker port is instantiated by the robot-adapter runner
+    # and shared via NATS in a later milestone. For now, `stack.audio_out`
+    # must point at a factory the operator provides.
+    name: null_playback
+    config: {}
+  vad:
+    name: silero_v5
+    config: {}
+  asr:
+    name: faster_whisper
+    config: {}
+  tts:
+    name: piper
+    config:
+      voice_paths:
+        ru: /opt/piper/voices/ru_RU-ruslan-medium.onnx
+        en: /opt/piper/voices/en_US-lessac-medium.onnx
+  # wake_word:
+  #   name: openwakeword
+  #   config:
+  #     model_paths: ["/opt/wake/hey_robot.onnx"]
+  #     threshold: 0.55

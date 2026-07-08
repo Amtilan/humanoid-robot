@@ -105,7 +105,7 @@ class SileroVad:
         model: Any = silero_vad.load_silero_vad(onnx=True)
 
         def _predict(samples: list[float]) -> float:
-            import numpy as np  # noqa: PLC0415 — runtime-optional dep
+            import numpy as np
 
             tensor = np.array(samples, dtype=np.float32)
             return float(model(tensor, _MODEL_SAMPLE_RATE_HZ))
