@@ -112,6 +112,9 @@ ignore = [
 "packages/humanoid-robot-adapters-asr-whisper/src/humanoid_robot/adapters/asr_whisper/adapter.py" = ["ANN401"]
 "packages/humanoid-robot-adapters-tts-piper/src/humanoid_robot/adapters/tts_piper/adapter.py" = ["ANN401"]
 "packages/humanoid-robot-adapters-vad-silero/src/humanoid_robot/adapters/vad_silero/adapter.py" = ["ANN401"]
+"packages/humanoid-robot-adapters-wakeword-openwakeword/src/humanoid_robot/adapters/wakeword_openwakeword/adapter.py" = ["ANN401"]
+# HITL and one-shot scripts use broad exception handling by design.
+"scripts/hitl_voice_smoke.py" = ["BLE001", "RUF100", "TRY300", "TRY400"]
 # Contract-test helpers legitimately use `assert` — that's their whole job.
 "packages/humanoid-robot-contract-tests/src/**/*.py" = ["S101"]
 # The lazy SDK cache is one variable behind a get/reset pair; a module-level
@@ -165,6 +168,7 @@ mypy_path = [
     "packages/humanoid-robot-adapters-asr-whisper/src",
     "packages/humanoid-robot-adapters-tts-piper/src",
     "packages/humanoid-robot-adapters-vad-silero/src",
+    "packages/humanoid-robot-adapters-wakeword-openwakeword/src",
     "apps/core/src",
     "apps/robot-adapter/src",
     "apps/voice/src",
@@ -190,6 +194,7 @@ module = [
     "piper.*",
     "faster_whisper",
     "silero_vad",
+    "openwakeword.*",
 ]
 ignore_missing_imports = true
 

@@ -10,10 +10,10 @@ from humanoid_robot.domain.voice import (
     Language,
     Transcription,
 )
-from humanoid_robot.events import AsrFinal, SpeechDetected
+from humanoid_robot.events import AsrFinal, SpeechDetected, WakeWordTriggered
 from humanoid_robot.ports.ai import AsrStreamChunk
 from humanoid_robot.ports.robot import AudioFrame
-from humanoid_robot.ports.voice import VadDecision
+from humanoid_robot.ports.voice import VadDecision, WakeWordEvent
 from humanoid_robot.testing import InMemoryEventBus
 from humanoid_robot.voice import VoiceSession, VoiceSessionConfig
 
@@ -122,3 +122,79 @@ class TestVoiceSession:
         assert not any(isinstance(ev, AsrFinal) for ev in bus.published)
         assert any(isinstance(ev, SpeechDetected) for ev in bus.published)
         assert asr.calls == []
+
+
+@dataclass(slots=True)
+class _FakeWakeWord:
+    fire_on_frame_index: int
+    _index: int = 0
+
+    async def feed(self, _frame: AudioFrame) -> WakeWordEvent | None:
+        self._index += 1
+        if self._index == self.fire_on_frame_index:
+            return WakeWordEvent(word="hey_robot", score=0.99)
+        return None
+
+    def keywords(self) -> tuple[str, ...]:
+        return ("hey_robot",)
+
+
+class TestVoiceSessionWakeWord:
+    async def test_wake_word_gates_listening(self) -> None:
+        # 5 silent frames before wake-word; wake-word on frame 6; then speech.
+        script = [False] * 5 + [False] * 20 + [True] * 15 + [False] * 8
+        vad = _FakeVad(scripted=script)
+        wake = _FakeWakeWord(fire_on_frame_index=6)
+        asr = _FakeAsr(scripted_text="теперь я слушаю")
+        bus = InMemoryEventBus()
+        session = VoiceSession(
+            vad=vad,
+            asr=asr,
+            bus=bus,
+            wake_word=wake,
+            config=VoiceSessionConfig(
+                require_wake_word=True,
+                min_speech_ms=100,
+                silence_hang_ms=400,
+                wake_word_grace_ms=5000,
+            ),
+        )
+        frames = [_frame(1600) for _ in range(len(script))]
+        await session.run(_feed(frames))
+
+        subjects = [type(ev).subject for ev in bus.published]
+        assert "speech.wake_word.triggered" in subjects
+        assert "asr.final" in subjects
+
+    async def test_wake_word_without_speech_returns_to_idle(self) -> None:
+        # Wake-word fires but no speech follows — grace period elapses.
+        # Frame 1 = wake, then all silence.
+        script = [False] * 40
+        vad = _FakeVad(scripted=script)
+        wake = _FakeWakeWord(fire_on_frame_index=1)
+        asr = _FakeAsr(scripted_text="…")
+        bus = InMemoryEventBus()
+        session = VoiceSession(
+            vad=vad,
+            asr=asr,
+            bus=bus,
+            wake_word=wake,
+            config=VoiceSessionConfig(
+                require_wake_word=True,
+                min_speech_ms=100,
+                silence_hang_ms=400,
+                wake_word_grace_ms=500,
+            ),
+        )
+        frames = [_frame(1600) for _ in range(len(script))]
+        await session.run(_feed(frames))
+
+        subjects = [type(ev).subject for ev in bus.published]
+        assert "speech.wake_word.triggered" in subjects
+        assert "asr.final" not in subjects
+        # Verify the state came back to IDLE.
+        from humanoid_robot.voice import VoiceSessionState  # noqa: PLC0415
+
+        assert session.state == VoiceSessionState.IDLE
+        # silence WakeWordTriggered event object exists
+        assert any(isinstance(ev, WakeWordTriggered) for ev in bus.published)

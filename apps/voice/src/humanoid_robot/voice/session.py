@@ -1,16 +1,20 @@
-"""Voice session — orchestrates mic → VAD → ASR → NATS events.
+"""Voice session — orchestrates mic → VAD → (wake-word gate) → ASR → NATS events.
 
 Design principles:
     - `VoiceSession` owns the state machine (IDLE → LISTENING → DECODING →
       IDLE). Everything else is a Port.
+    - Wake-word is optional. When configured, the session only starts
+      LISTENING after a wake-word event and returns to IDLE after each
+      utterance is decoded.
     - The session is a pure asyncio coroutine driven by `run()` — no threads,
       no globals. Ports do the heavy lifting.
-    - Testable end-to-end with in-memory fakes: `MockVad`, `MockAsr`,
-      `InMemoryEventBus`.
+    - Testable end-to-end with in-memory fakes: `FakeVad`, `FakeWakeWord`,
+      `FakeAsr`, `InMemoryEventBus`.
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -25,7 +29,7 @@ from humanoid_robot.domain.shared import (
     new_utterance_id,
 )
 from humanoid_robot.domain.voice import Language
-from humanoid_robot.events import AsrFinal, SpeechDetected
+from humanoid_robot.events import AsrFinal, SpeechDetected, WakeWordTriggered
 from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.observability import get_logger
 from humanoid_robot.ports import (
@@ -34,6 +38,7 @@ from humanoid_robot.ports import (
     EventBusPort,
     VadDecision,
     VadPort,
+    WakeWordPort,
 )
 
 _LOG = get_logger("cortex-voice.session")
@@ -41,6 +46,7 @@ _LOG = get_logger("cortex-voice.session")
 
 class VoiceSessionState(StrEnum):
     IDLE = "idle"
+    ARMED = "armed"
     LISTENING = "listening"
     DECODING = "decoding"
 
@@ -55,6 +61,12 @@ class VoiceSessionConfig(BaseModel):
     silence_hang_ms: int = Field(default=600, ge=100, le=3000)
     max_utterance_ms: int = Field(default=10_000, ge=1000, le=60_000)
     producer: str = "cortex-voice"
+    # When true, listening only starts after a wake-word. When false, VAD
+    # is the sole trigger.
+    require_wake_word: bool = False
+    # Grace period after wake-word during which we accept speech even before
+    # VAD has picked it up (helps with quiet openers).
+    wake_word_grace_ms: int = Field(default=1500, ge=0, le=10_000)
 
 
 @dataclass(slots=True)
@@ -64,13 +76,21 @@ class VoiceSession:
     vad: VadPort
     asr: AsrPort
     bus: EventBusPort
+    wake_word: WakeWordPort | None = None
     config: VoiceSessionConfig = field(default_factory=VoiceSessionConfig)
     session_id: SessionId = field(default_factory=new_session_id)
     _state: VoiceSessionState = field(default=VoiceSessionState.IDLE, init=False)
     _speech_buffer: bytearray = field(default_factory=bytearray, init=False)
     _speech_ms: int = field(default=0, init=False)
     _silence_ms: int = field(default=0, init=False)
+    _armed_grace_ms: int = field(default=0, init=False)
     _current_utterance_id: UtteranceId | None = field(default=None, init=False)
+
+    def __post_init__(self) -> None:
+        if not self.config.require_wake_word:
+            self._state = VoiceSessionState.IDLE
+        else:
+            self._state = VoiceSessionState.IDLE  # will move to ARMED on wake-word
 
     @property
     def state(self) -> VoiceSessionState:
@@ -78,23 +98,53 @@ class VoiceSession:
 
     async def run(self, frames: AsyncIterator[AudioFrame]) -> None:
         """Consume the mic stream until it ends; publish events along the way."""
+        last_frame: AudioFrame | None = None
         async for frame in frames:
+            last_frame = frame
             await self._handle(frame)
         # Stream ended — flush any in-flight utterance.
-        if self._state != VoiceSessionState.IDLE and self._speech_buffer:
-            await self._finalize(frame.format.sample_rate_hz)
+        if (
+            self._state in (VoiceSessionState.LISTENING, VoiceSessionState.ARMED)
+            and self._speech_buffer
+            and last_frame is not None
+        ):
+            await self._finalize(last_frame.format.sample_rate_hz)
 
     async def _handle(self, frame: AudioFrame) -> None:
-        decision = await self.vad.decide(frame)
         frame_ms = len(frame.pcm) * 1000 // frame.format.bytes_per_second
 
+        if self.config.require_wake_word and self._state == VoiceSessionState.IDLE:
+            await self._check_wake_word(frame)
+            return
+
+        decision = await self.vad.decide(frame)
         if decision.is_speech:
             await self._on_speech(frame, decision, frame_ms)
         else:
             await self._on_silence(frame, frame_ms)
 
+    async def _check_wake_word(self, frame: AudioFrame) -> None:
+        if self.wake_word is None:
+            return
+        event = await self.wake_word.feed(frame)
+        if event is None:
+            return
+        self._state = VoiceSessionState.ARMED
+        self._armed_grace_ms = self.config.wake_word_grace_ms
+        await self.bus.publish(
+            WakeWordTriggered(
+                meta=EventMetadata(
+                    correlation_id=new_correlation_id(),
+                    producer=self.config.producer,
+                ),
+                session_id=self.session_id,
+                word=event.word,
+                confidence=event.score,
+            )
+        )
+
     async def _on_speech(self, frame: AudioFrame, decision: VadDecision, frame_ms: int) -> None:
-        if self._state == VoiceSessionState.IDLE:
+        if self._state in (VoiceSessionState.IDLE, VoiceSessionState.ARMED):
             self._state = VoiceSessionState.LISTENING
             self._current_utterance_id = new_utterance_id()
             self._speech_ms = 0
@@ -113,6 +163,12 @@ class VoiceSession:
 
     async def _on_silence(self, frame: AudioFrame, frame_ms: int) -> None:
         if self._state == VoiceSessionState.IDLE:
+            return
+        if self._state == VoiceSessionState.ARMED:
+            self._armed_grace_ms = max(0, self._armed_grace_ms - frame_ms)
+            if self._armed_grace_ms == 0:
+                # No speech within the wake-word grace period — return to IDLE.
+                self._state = VoiceSessionState.IDLE
             return
         self._silence_ms += frame_ms
         if (
@@ -171,10 +227,10 @@ class VoiceSession:
 
 
 def _prob_to_db(prob: float) -> float:
-    # Log-space mapping for a probability [0,1] to a decibel-like scalar.
-    # Only used for observability, not for gating.
+    """Log-space mapping for probability [0, 1] to a decibel-like scalar.
+
+    Only used for observability, not for gating.
+    """
     if prob <= 0.0:
         return -120.0
-    import math  # noqa: PLC0415
-
     return 20.0 * math.log10(max(prob, 1e-6))

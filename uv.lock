@@ -16,6 +16,7 @@ members = [
     "humanoid-robot-adapters-tts-piper",
     "humanoid-robot-adapters-unitree-g1",
     "humanoid-robot-adapters-vad-silero",
+    "humanoid-robot-adapters-wakeword-openwakeword",
     "humanoid-robot-contract-tests",
     "humanoid-robot-core",
     "humanoid-robot-domain",
@@ -937,6 +938,32 @@ requires-dist = [
     { name = "onnxruntime", marker = "extra == 'runtime'", specifier = ">=1.19" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "silero-vad", marker = "extra == 'runtime'", specifier = ">=5.1" },
+]
+provides-extras = ["runtime"]
+
+[[package]]
+name = "humanoid-robot-adapters-wakeword-openwakeword"
+version = "0.0.0"
+source = { editable = "packages/humanoid-robot-adapters-wakeword-openwakeword" }
+dependencies = [
+    { name = "humanoid-robot-domain" },
+    { name = "humanoid-robot-ports" },
+    { name = "pydantic" },
+]
+
+[package.optional-dependencies]
+runtime = [
+    { name = "numpy" },
+    { name = "onnxruntime" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "humanoid-robot-domain", editable = "packages/humanoid-robot-domain" },
+    { name = "humanoid-robot-ports", editable = "packages/humanoid-robot-ports" },
+    { name = "numpy", marker = "extra == 'runtime'", specifier = ">=1.24" },
+    { name = "onnxruntime", marker = "extra == 'runtime'", specifier = ">=1.19" },
+    { name = "pydantic", specifier = ">=2.9" },
 ]
 provides-extras = ["runtime"]
 
