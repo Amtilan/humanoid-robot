@@ -198,6 +198,8 @@ export const api = {
     postJson<PluginStatus>(`/api/v1/plugins/${encodeURIComponent(name)}/deactivate`),
   robotManifests: () => getJson<RobotManifestSnapshot[]>("/api/v1/robot/manifests"),
   ragAsk: (body: RagAskRequest) => postJson<RagAskResponse, RagAskRequest>("/api/v1/rag/ask", body),
+  ragAskStart: (body: RagAskRequest) =>
+    postJson<{ session_id: string }, RagAskRequest>("/api/v1/rag/ask/start", body),
   settings: () => getJson<SettingsResponse>("/api/v1/settings/"),
   knowledgeStatus: () => getJson<KnowledgeStatusResponse>("/api/v1/knowledge/status"),
   deleteKnowledgeSource: (sourceId: string) =>

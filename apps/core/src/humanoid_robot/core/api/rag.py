@@ -52,6 +52,14 @@ class RagAskResponse(BaseModel):
     citations: tuple[Citation, ...] = ()
 
 
+class RagAskStartResponse(BaseModel):
+    """Handle for a fire-and-forget QA request tracked over the bus."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    session_id: SessionId
+
+
 @router.post("/ask", response_model=RagAskResponse)
 async def ask(body: RagAskRequest, request: Request) -> RagAskResponse:
     container: AppContainer = request.app.state.container
@@ -114,3 +122,31 @@ async def ask(body: RagAskRequest, request: Request) -> RagAskResponse:
     # Defensive — the filter above should preclude this, but keep the API
     # contract simple for the caller.
     return RagAskResponse(session_id=session_id, outcome="timeout")
+
+
+@router.post("/ask/start", response_model=RagAskStartResponse)
+async def ask_start(body: RagAskRequest, request: Request) -> RagAskStartResponse:
+    """Publish the ASR event immediately and return the session id.
+
+    The client is expected to subscribe to the WebSocket event stream
+    and read `asr.*`, `llm.answer.token`, `llm.answer`, `llm.rejected`
+    for the returned `session_id`.  This enables a live pipeline view
+    without holding an HTTP connection open for the whole run.
+    """
+    container: AppContainer = request.app.state.container
+    bus = container.event_bus
+    session_id = new_session_id()
+    await bus.publish(
+        AsrFinal(
+            meta=EventMetadata(
+                correlation_id=new_correlation_id(),
+                producer="cortex-core.rag_test",
+            ),
+            session_id=session_id,
+            utterance_id=new_utterance_id(),
+            text=body.question,
+            language=body.language,
+            confidence=1.0,
+        )
+    )
+    return RagAskStartResponse(session_id=session_id)
