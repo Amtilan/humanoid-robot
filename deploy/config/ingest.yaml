@@ -1,0 +1,49 @@
+# Reference configuration for cortex-ingest.
+#
+# Copy to /etc/humanoid-robot/ingest.yaml and edit for your deployment.
+# Environment variables HR_INGEST__* override any value defined here.
+
+environment: prod
+service_name: cortex-ingest
+log_level: INFO
+chunk_batch_size: 64
+
+stack:
+  chunker:
+    name: token
+    config:
+      target_tokens: 512
+      hard_max_tokens: 768
+      overlap_tokens: 64
+      chars_per_token: 4.0
+  embedder:
+    name: bge_m3
+    config:
+      model_name: BAAI/bge-m3
+      device: cuda
+      use_fp16: true
+      max_length: 8192
+  vector_store:
+    name: qdrant_local
+    config:
+      local_path: /var/lib/humanoid-robot/qdrant
+      collection: knowledge
+      dense_dim: 1024
+      upsert_batch_size: 64
+  parsers:
+    - extension: .txt
+      adapter:
+        name: text
+        config: {}
+    - extension: .md
+      adapter:
+        name: markdown
+        config: {}
+    - extension: .html
+      adapter:
+        name: html
+        config: {}
+    - extension: .htm
+      adapter:
+        name: html
+        config: {}

@@ -127,6 +127,11 @@ ignore = [
 "apps/rag/src/humanoid_robot/rag/__main__.py" = ["B008"]
 "apps/rag/src/humanoid_robot/rag/composition.py" = ["ANN401"]
 "scripts/hitl_rag_smoke.py" = ["TRY300"]
+"apps/ingest/src/humanoid_robot/ingest/__main__.py" = ["B008"]
+"apps/ingest/src/humanoid_robot/ingest/composition.py" = ["ANN401"]
+# Chunker main loop legitimately has multiple boundary conditions; splitting
+# them across functions hides the sequence rather than clarifying it.
+"packages/humanoid-robot-adapters-chunker-token/src/humanoid_robot/adapters/chunker_token/chunker.py" = ["C901"]
 # G1 downmix path uses a small numeric constant literally; pinning it to a
 # named constant hurts readability of the copy loop.
 "packages/humanoid-robot-adapters-unitree-g1/src/humanoid_robot/adapters/unitree_g1/audio_in.py" = ["PLR2004"]
@@ -194,10 +199,13 @@ mypy_path = [
     "packages/humanoid-robot-adapters-embed-bge/src",
     "packages/humanoid-robot-adapters-rerank-bge/src",
     "packages/humanoid-robot-adapters-vector-qdrant/src",
+    "packages/humanoid-robot-adapters-parser-basic/src",
+    "packages/humanoid-robot-adapters-chunker-token/src",
     "apps/core/src",
     "apps/robot-adapter/src",
     "apps/voice/src",
     "apps/rag/src",
+    "apps/ingest/src",
 ]
 exclude = [
     "^\\.venv/",
