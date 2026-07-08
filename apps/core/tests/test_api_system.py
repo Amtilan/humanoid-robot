@@ -12,8 +12,11 @@ from prometheus_client import CollectorRegistry
 
 from humanoid_robot.core.api import router as api_router
 from humanoid_robot.core.container import AppContainer
+from humanoid_robot.core.plugin_manager import PluginManager
+from humanoid_robot.core.robot_manifest_cache import RobotManifestCache
 from humanoid_robot.core.settings import CoreSettings
 from humanoid_robot.observability import PromMetrics
+from humanoid_robot.plugins_sdk import PluginRegistry
 from humanoid_robot.testing import InMemoryEventBus
 
 
@@ -27,6 +30,8 @@ def app() -> FastAPI:
         event_bus=bus,
         metrics_registry=registry,
         metrics=PromMetrics(registry=registry),
+        plugin_manager=PluginManager(registry=PluginRegistry.from_entries([]), bus=bus),
+        robot_manifest_cache=RobotManifestCache(),
     )
 
     @asynccontextmanager

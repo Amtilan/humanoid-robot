@@ -1,15 +1,32 @@
 import { NavLink, Route, Routes } from "react-router-dom";
-import { Activity, Boxes, LayoutDashboard, Radio } from "lucide-react";
+import {
+  Activity,
+  Bot,
+  Boxes,
+  LayoutDashboard,
+  Puzzle,
+  Radio,
+  Settings as SettingsIcon,
+  Sparkles,
+} from "lucide-react";
 
 import { AdaptersPage } from "./pages/AdaptersPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { EventsPage } from "./pages/EventsPage";
+import { PluginsPage } from "./pages/PluginsPage";
+import { QaPage } from "./pages/QaPage";
+import { RobotPage } from "./pages/RobotPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { cn } from "./lib/cn";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/robot", label: "Robot", icon: Bot },
+  { to: "/qa", label: "QA test", icon: Sparkles },
   { to: "/adapters", label: "Adapters", icon: Boxes },
+  { to: "/plugins", label: "Plugins", icon: Puzzle },
   { to: "/events", label: "Events", icon: Radio },
+  { to: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
 export function App() {
@@ -42,8 +59,12 @@ export function App() {
       <main className="flex-1 overflow-auto p-8">
         <Routes>
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/robot" element={<RobotPage />} />
+          <Route path="/qa" element={<QaPage />} />
           <Route path="/adapters" element={<AdaptersPage />} />
+          <Route path="/plugins" element={<PluginsPage />} />
           <Route path="/events" element={<EventsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
     </div>
