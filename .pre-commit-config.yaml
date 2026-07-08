@@ -36,6 +36,9 @@ repos:
         additional_dependencies:
           - pydantic>=2.9
           - types-PyYAML
+          # Tests in the checked packages import pytest; the isolated hook env
+          # needs it so `import pytest` / `@pytest.mark.*` decorators type-check.
+          - pytest>=8.3.0
         args: ["--config-file=pyproject.toml"]
         # Fast pre-commit: only check strict-typed packages; full sweep in CI.
         files: ^packages/(humanoid-robot-domain|humanoid-robot-events|humanoid-robot-ports)/
