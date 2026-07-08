@@ -71,3 +71,13 @@ class SecurityAudit(BaseEvent):
     resource: str
     allowed: bool
     detail: str | None = None
+
+
+class SystemDiagnosticsTick(BaseEvent):
+    """Periodic host + optional GPU snapshot pushed to observers."""
+
+    subject: ClassVar[str] = "system.diagnostics.tick"
+    schema_version: ClassVar[int] = 1
+
+    host: dict[str, object]
+    gpu: dict[str, object]

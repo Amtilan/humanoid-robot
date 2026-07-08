@@ -14,6 +14,7 @@ from typing import Self
 from prometheus_client import CollectorRegistry
 
 from humanoid_robot.adapters.nats import NatsEventBus, NatsEventBusConfig
+from humanoid_robot.core.diagnostics_ticker import DiagnosticsTicker
 from humanoid_robot.core.knowledge_service import KnowledgeService
 from humanoid_robot.core.plugin_manager import PluginManager
 from humanoid_robot.core.robot_manifest_cache import RobotManifestCache
@@ -38,6 +39,7 @@ class AppContainer:
     plugin_manager: PluginManager
     robot_manifest_cache: RobotManifestCache
     knowledge_service: KnowledgeService = field(default_factory=KnowledgeService)
+    diagnostics_ticker: DiagnosticsTicker | None = field(default=None)
     _manifest_subscription: Subscription | None = field(default=None)
 
     @classmethod
@@ -66,6 +68,9 @@ class AppContainer:
         manifest_cache = RobotManifestCache()
         manifest_subscription = await manifest_cache.start(bus)
 
+        diagnostics_ticker = DiagnosticsTicker(bus=bus)
+        await diagnostics_ticker.start()
+
         return cls(
             settings=settings,
             event_bus=bus,
@@ -74,12 +79,16 @@ class AppContainer:
             plugin_manager=plugin_manager,
             robot_manifest_cache=manifest_cache,
             knowledge_service=KnowledgeService(),
+            diagnostics_ticker=diagnostics_ticker,
             _manifest_subscription=manifest_subscription,
         )
 
     async def close(self) -> None:
         """Release resources; safe to call multiple times."""
         await self.plugin_manager.deactivate_all()
+        if self.diagnostics_ticker is not None:
+            await self.diagnostics_ticker.stop()
+            self.diagnostics_ticker = None
         if self._manifest_subscription is not None:
             with contextlib.suppress(Exception):
                 await self._manifest_subscription.cancel()

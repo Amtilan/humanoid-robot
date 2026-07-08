@@ -1,27 +1,76 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
 import { api, type GpuStats, type HostDiagnostics } from "../api/client";
+import { useEventSubscription } from "../lib/eventStream";
+
+const DIAG_SUBJECT = "system.diagnostics.tick";
+const STALE_MS = 12_000;
 
 export function DiagnosticsPage() {
+  const client = useQueryClient();
+  const [lastTickAt, setLastTickAt] = useState<number | null>(null);
+  const lastTickRef = useRef<number | null>(null);
+  lastTickRef.current = lastTickAt;
+
+  const usePush = lastTickAt !== null && Date.now() - lastTickAt < STALE_MS;
+
   const hostQuery = useQuery({
     queryKey: ["diagnostics", "host"],
     queryFn: api.diagnosticsHost,
-    refetchInterval: 2_000,
+    refetchInterval: usePush ? false : 2_000,
   });
   const gpuQuery = useQuery({
     queryKey: ["diagnostics", "gpu"],
     queryFn: api.diagnosticsGpu,
-    refetchInterval: 5_000,
+    refetchInterval: usePush ? false : 5_000,
   });
+
+  useEventSubscription(DIAG_SUBJECT, (envelope) => {
+    const host = envelope.data.host as HostDiagnostics | undefined;
+    const gpu = envelope.data.gpu as GpuStats | undefined;
+    if (host) client.setQueryData(["diagnostics", "host"], host);
+    if (gpu) client.setQueryData(["diagnostics", "gpu"], gpu);
+    setLastTickAt(Date.now());
+  });
+
+  useEffect(() => {
+    if (lastTickAt === null) return;
+    const handle = window.setInterval(() => {
+      if (lastTickRef.current === null) return;
+      if (Date.now() - lastTickRef.current > STALE_MS) {
+        setLastTickAt(null);
+      }
+    }, 2_000);
+    return () => window.clearInterval(handle);
+  }, [lastTickAt]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Diagnostics</h1>
-        <p className="text-sm text-muted-foreground">
-          Live host metrics. GPU section only renders on hosts where
-          <code className="mx-1 rounded bg-muted px-1">jtop</code> reports back.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Diagnostics</h1>
+          <p className="text-sm text-muted-foreground">
+            Live host metrics. GPU section only renders on hosts where
+            <code className="mx-1 rounded bg-muted px-1">jtop</code> reports back.
+          </p>
+        </div>
+        <span
+          className={
+            usePush
+              ? "inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-300"
+              : "inline-flex items-center gap-1.5 rounded-full border border-border bg-background/60 px-2 py-0.5 text-xs text-muted-foreground"
+          }
+        >
+          <span
+            className={
+              usePush
+                ? "inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400"
+                : "inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground"
+            }
+          />
+          {usePush ? "push (bus)" : "polling"}
+        </span>
       </div>
 
       {hostQuery.isPending ? (
