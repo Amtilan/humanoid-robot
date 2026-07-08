@@ -14,6 +14,7 @@ from typing import Self
 from prometheus_client import CollectorRegistry
 
 from humanoid_robot.adapters.nats import NatsEventBus, NatsEventBusConfig
+from humanoid_robot.core.knowledge_service import KnowledgeService
 from humanoid_robot.core.plugin_manager import PluginManager
 from humanoid_robot.core.robot_manifest_cache import RobotManifestCache
 from humanoid_robot.core.settings import CoreSettings
@@ -36,6 +37,7 @@ class AppContainer:
     metrics: PromMetrics
     plugin_manager: PluginManager
     robot_manifest_cache: RobotManifestCache
+    knowledge_service: KnowledgeService = field(default_factory=KnowledgeService)
     _manifest_subscription: Subscription | None = field(default=None)
 
     @classmethod
@@ -71,6 +73,7 @@ class AppContainer:
             metrics=metrics,
             plugin_manager=plugin_manager,
             robot_manifest_cache=manifest_cache,
+            knowledge_service=KnowledgeService(),
             _manifest_subscription=manifest_subscription,
         )
 

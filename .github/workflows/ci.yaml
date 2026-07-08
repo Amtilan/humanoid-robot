@@ -94,7 +94,8 @@ jobs:
           version: "11.0.8"
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # pnpm 11 requires Node >= 22.13.
+          node-version: "22"
           cache: pnpm
           cache-dependency-path: web/dashboard/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile

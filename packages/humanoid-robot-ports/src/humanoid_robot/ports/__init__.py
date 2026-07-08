@@ -15,6 +15,7 @@ from humanoid_robot.ports.event_bus import EventBusPort, EventHandler, Subscript
 from humanoid_robot.ports.knowledge import (
     ChunkerPort,
     DocumentParserPort,
+    KnowledgeSourceSummary,
     RetrievalQuery,
     VectorStorePort,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "EventBusPort",
     "EventHandler",
     "HandPort",
+    "KnowledgeSourceSummary",
     "LlmPort",
     "LlmRequest",
     "LlmResponse",

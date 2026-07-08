@@ -1,6 +1,7 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import {
   Activity,
+  BookOpen,
   Bot,
   Boxes,
   LayoutDashboard,
@@ -13,6 +14,7 @@ import {
 import { AdaptersPage } from "./pages/AdaptersPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { EventsPage } from "./pages/EventsPage";
+import { KnowledgePage } from "./pages/KnowledgePage";
 import { PluginsPage } from "./pages/PluginsPage";
 import { QaPage } from "./pages/QaPage";
 import { RobotPage } from "./pages/RobotPage";
@@ -22,6 +24,7 @@ import { cn } from "./lib/cn";
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/robot", label: "Robot", icon: Bot },
+  { to: "/knowledge", label: "Knowledge", icon: BookOpen },
   { to: "/qa", label: "QA test", icon: Sparkles },
   { to: "/adapters", label: "Adapters", icon: Boxes },
   { to: "/plugins", label: "Plugins", icon: Puzzle },
@@ -60,6 +63,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/robot" element={<RobotPage />} />
+          <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/qa" element={<QaPage />} />
           <Route path="/adapters" element={<AdaptersPage />} />
           <Route path="/plugins" element={<PluginsPage />} />

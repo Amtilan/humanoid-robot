@@ -112,6 +112,36 @@ export interface SettingsResponse {
   settings: Record<string, unknown>;
 }
 
+export interface KnowledgeSourceSummary {
+  source_id: string;
+  chunk_count: number;
+  sample_title: string | null;
+}
+
+export interface KnowledgeStatusResponse {
+  configured: boolean;
+  sources: KnowledgeSourceSummary[];
+}
+
+export interface IngestJobStatus {
+  id: string;
+  directory: string;
+  state: "running" | "succeeded" | "failed";
+  started_at: string;
+  finished_at: string | null;
+  exit_code: number | null;
+  stdout_tail: string | null;
+  stderr_tail: string | null;
+}
+
+async function deleteJson(url: string): Promise<void> {
+  const response = await fetch(url, { method: "DELETE" });
+  if (!response.ok && response.status !== 204) {
+    const detail = await response.text();
+    throw new Error(`${response.status} ${response.statusText}: ${detail}`);
+  }
+}
+
 export const api = {
   info: () => getJson<ServiceInfo>("/api/v1/system/info"),
   health: () => getJson<HealthResponse>("/api/v1/system/health/ready"),
@@ -126,4 +156,10 @@ export const api = {
   robotManifests: () => getJson<RobotManifestSnapshot[]>("/api/v1/robot/manifests"),
   ragAsk: (body: RagAskRequest) => postJson<RagAskResponse, RagAskRequest>("/api/v1/rag/ask", body),
   settings: () => getJson<SettingsResponse>("/api/v1/settings/"),
+  knowledgeStatus: () => getJson<KnowledgeStatusResponse>("/api/v1/knowledge/status"),
+  deleteKnowledgeSource: (sourceId: string) =>
+    deleteJson(`/api/v1/knowledge/sources/${encodeURIComponent(sourceId)}`),
+  startIngest: (body: { directory: string; config_path: string }) =>
+    postJson<IngestJobStatus, typeof body>("/api/v1/knowledge/ingest-jobs", body),
+  ingestJobs: () => getJson<IngestJobStatus[]>("/api/v1/knowledge/ingest-jobs"),
 };

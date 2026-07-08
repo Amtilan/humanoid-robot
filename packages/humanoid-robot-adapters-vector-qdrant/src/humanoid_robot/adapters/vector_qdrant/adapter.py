@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from humanoid_robot.domain.knowledge import KnowledgeChunk, RetrievalHit
 from humanoid_robot.ports.ai import EmbeddingPort
-from humanoid_robot.ports.knowledge import RetrievalQuery
+from humanoid_robot.ports.knowledge import KnowledgeSourceSummary, RetrievalQuery
 
 _DENSE_VECTOR_NAME = "dense"
 _SPARSE_VECTOR_NAME = "sparse"
@@ -144,6 +144,57 @@ class QdrantLocalStore:
             sparse_weight=query.sparse_weight,
         )
         return tuple(fused)
+
+    async def list_sources(self) -> tuple[KnowledgeSourceSummary, ...]:
+        """Aggregate chunks by `source_id` via a full-collection scroll.
+
+        Local Qdrant does not expose a native ``count group_by`` on payload
+        fields; scrolling is cheap for the knowledge-base sizes we expect
+        on a single robot (thousands of chunks, not millions).
+        """
+        client = self._ensure_client()
+
+        def _scroll() -> list[Any]:
+            all_points: list[Any] = []
+            next_offset: Any = None
+            while True:
+                points, next_offset = client.scroll(
+                    collection_name=self.config.collection,
+                    limit=256,
+                    with_payload=True,
+                    with_vectors=False,
+                    offset=next_offset,
+                )
+                all_points.extend(points)
+                if next_offset is None:
+                    break
+            return all_points
+
+        try:
+            points = await self._run(_scroll)
+        except Exception:  # noqa: BLE001
+            return ()
+
+        counts: dict[str, int] = {}
+        titles: dict[str, str | None] = {}
+        for point in points:
+            payload = getattr(point, "payload", None) or {}
+            source_id = str(payload.get("source_id", "") or "")
+            if not source_id:
+                continue
+            counts[source_id] = counts.get(source_id, 0) + 1
+            if source_id not in titles:
+                sample = payload.get("title") or payload.get("content")
+                titles[source_id] = str(sample)[:80] if sample is not None else None
+
+        return tuple(
+            KnowledgeSourceSummary(
+                source_id=source_id,
+                chunk_count=count,
+                sample_title=titles.get(source_id),
+            )
+            for source_id, count in sorted(counts.items())
+        )
 
     async def close(self) -> None:
         if self._client is None:

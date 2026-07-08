@@ -11,7 +11,7 @@ from humanoid_robot.domain.knowledge import (
 )
 from humanoid_robot.domain.voice import Language
 from humanoid_robot.ports.ai import LlmRequest, LlmResponse
-from humanoid_robot.ports.knowledge import RetrievalQuery
+from humanoid_robot.ports.knowledge import KnowledgeSourceSummary, RetrievalQuery
 from humanoid_robot.rag import (
     GroundedQAConfig,
     GroundedQAOrchestrator,
@@ -40,6 +40,9 @@ class _FakeStore:
 
     async def search(self, _query: RetrievalQuery) -> tuple[RetrievalHit, ...]:
         return self.scripted
+
+    async def list_sources(self) -> tuple[KnowledgeSourceSummary, ...]:
+        return ()
 
     async def close(self) -> None:
         return

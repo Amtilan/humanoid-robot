@@ -25,6 +25,16 @@ class RetrievalQuery(BaseModel):
     filters: dict[str, str] = Field(default_factory=dict)
 
 
+class KnowledgeSourceSummary(BaseModel):
+    """Aggregate view of one ingested source — grouped from stored chunks."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source_id: str
+    chunk_count: int
+    sample_title: str | None = None
+
+
 @runtime_checkable
 class VectorStorePort(Protocol):
     """Vector store — hybrid dense+sparse retrieval, keyed by chunk id."""
@@ -34,6 +44,8 @@ class VectorStorePort(Protocol):
     async def delete_by_source(self, source_id: str) -> None: ...
 
     async def search(self, query: RetrievalQuery) -> tuple[RetrievalHit, ...]: ...
+
+    async def list_sources(self) -> tuple[KnowledgeSourceSummary, ...]: ...
 
     async def close(self) -> None: ...
 

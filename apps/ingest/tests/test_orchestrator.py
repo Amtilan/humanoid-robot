@@ -13,7 +13,7 @@ from humanoid_robot.domain.knowledge import (
     RetrievalHit,
 )
 from humanoid_robot.ingest import IngestOrchestrator
-from humanoid_robot.ports.knowledge import RetrievalQuery
+from humanoid_robot.ports.knowledge import KnowledgeSourceSummary, RetrievalQuery
 
 
 @dataclass(slots=True)
@@ -47,6 +47,9 @@ class _FakeStore:
         return
 
     async def search(self, _query: RetrievalQuery) -> tuple[RetrievalHit, ...]:
+        return ()
+
+    async def list_sources(self) -> tuple[KnowledgeSourceSummary, ...]:
         return ()
 
     async def close(self) -> None:

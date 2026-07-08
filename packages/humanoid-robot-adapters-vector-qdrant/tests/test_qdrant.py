@@ -42,6 +42,7 @@ class _FakeQdrant:
     deletes: list[Any] = field(default_factory=list)
     dense_hits: list[Any] = field(default_factory=list)
     sparse_hits: list[Any] = field(default_factory=list)
+    scroll_pages: list[list[Any]] = field(default_factory=list)
     closed: bool = False
     search_calls: list[dict[str, Any]] = field(default_factory=list)
 
@@ -70,6 +71,24 @@ class _FakeQdrant:
         if name == "sparse":
             return list(self.sparse_hits)
         return list(self.dense_hits)
+
+    def scroll(
+        self,
+        *,
+        collection_name: str,
+        limit: int,
+        with_payload: bool,
+        with_vectors: bool,
+        offset: Any,
+    ) -> tuple[list[Any], Any]:
+        del collection_name, limit, with_payload, with_vectors
+        # If the fake was seeded with pages, page through them.
+        pages = self.scroll_pages
+        index = offset or 0
+        if index >= len(pages):
+            return ([], None)
+        next_offset = index + 1 if index + 1 < len(pages) else None
+        return (pages[index], next_offset)
 
     def close(self) -> None:
         self.closed = True
@@ -235,3 +254,40 @@ class TestQdrantLocalStore:
         await store.delete_by_source("s1")
         await store.close()
         assert fake.closed
+
+    async def test_list_sources_aggregates_scroll(self) -> None:
+        fake = _FakeQdrant(
+            scroll_pages=[
+                [
+                    SimpleNamespace(payload={"source_id": "s1"}),
+                    SimpleNamespace(payload={"source_id": "s1"}),
+                    SimpleNamespace(payload={"source_id": "s2"}),
+                ],
+                [
+                    SimpleNamespace(payload={"source_id": "s1"}),
+                    SimpleNamespace(payload={"source_id": "s3"}),
+                ],
+            ]
+        )
+        store = QdrantLocalStore(
+            config=QdrantConfig(),
+            embedder=_FakeEmbedder(),
+            loader=_loader(fake),
+        )
+        summaries = await store.list_sources()
+        by_id = {s.source_id: s.chunk_count for s in summaries}
+        assert by_id == {"s1": 3, "s2": 1, "s3": 1}
+
+    async def test_list_sources_returns_empty_on_scroll_failure(self) -> None:
+        class _Buggy(_FakeQdrant):
+            def scroll(self, **_kwargs: Any) -> tuple[list[Any], Any]:
+                msg = "boom"
+                raise RuntimeError(msg)
+
+        fake = _Buggy()
+        store = QdrantLocalStore(
+            config=QdrantConfig(),
+            embedder=_FakeEmbedder(),
+            loader=_loader(fake),
+        )
+        assert await store.list_sources() == ()

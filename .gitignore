@@ -237,6 +237,7 @@ web/**/dist/
 web/**/.next/
 web/**/.cache/
 web/**/.turbo/
+web/**/*.tsbuildinfo
 .pnpm-store/
 
 # Local state — never commit
