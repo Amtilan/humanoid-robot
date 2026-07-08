@@ -4,6 +4,11 @@ from humanoid_robot.adapters.unitree_g1.adapter import (
     UnitreeG1Adapter,
     UnitreeG1Settings,
 )
+from humanoid_robot.adapters.unitree_g1.arm import UnitreeG1Arm
+from humanoid_robot.adapters.unitree_g1.audio_out import (
+    AudioFormatMismatchError,
+    UnitreeG1AudioOut,
+)
 from humanoid_robot.adapters.unitree_g1.manifest import build_manifest
 from humanoid_robot.adapters.unitree_g1.sdk import (
     UnitreeSdkNotAvailableError,
@@ -11,7 +16,10 @@ from humanoid_robot.adapters.unitree_g1.sdk import (
 )
 
 __all__ = [
+    "AudioFormatMismatchError",
     "UnitreeG1Adapter",
+    "UnitreeG1Arm",
+    "UnitreeG1AudioOut",
     "UnitreeG1Settings",
     "UnitreeSdkNotAvailableError",
     "build_manifest",

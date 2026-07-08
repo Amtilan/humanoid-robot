@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import importlib
 from dataclasses import dataclass
-from types import ModuleType
+from typing import Any
 
 
 class UnitreeSdkNotAvailableError(RuntimeError):
@@ -27,13 +27,16 @@ class UnitreeSdkNotAvailableError(RuntimeError):
 class SdkHandles:
     """The subset of SDK modules the adapter needs.
 
-    Held once per process; obtained via `require_sdk()`.
+    Held once per process; obtained via `require_sdk()`. Fields are typed as
+    `Any` so tests can inject `types.SimpleNamespace` fakes with the shape
+    the adapter reaches into (specific classes / callables) without dragging
+    the vendor SDK's runtime type stubs into every test environment.
     """
 
-    channel: ModuleType
-    audio_client: ModuleType
-    arm_client: ModuleType
-    loco_client: ModuleType | None = None
+    channel: Any
+    audio_client: Any
+    arm_client: Any
+    loco_client: Any = None
 
 
 _CACHED: SdkHandles | None = None
@@ -53,10 +56,9 @@ def require_sdk() -> SdkHandles:
         raise UnitreeSdkNotAvailableError from exc
 
     # LocoClient is optional — it exists on newer SDKs; degrade gracefully.
+    loco_client: Any
     try:
-        loco_client: ModuleType | None = importlib.import_module(
-            "unitree_sdk2py.g1.loco.g1_loco_client"
-        )
+        loco_client = importlib.import_module("unitree_sdk2py.g1.loco.g1_loco_client")
     except ImportError:
         loco_client = None
 

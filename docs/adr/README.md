@@ -26,3 +26,5 @@ with a small addition (alternatives table).
 - [0001 — Hexagonal + DDD + Event-Driven core style](0001-hexagonal-ddd-event-driven.md)
 - [0002 — Monorepo with uv workspaces](0002-monorepo-uv-workspaces.md)
 - [0003 — NATS + JetStream as the platform event bus](0003-nats-jetstream-event-bus.md)
+- [0004 — HW-first voice pipeline (XMOS XVF3800 primary)](0004-hw-first-voice-pipeline.md)
+- [0005 — Offline AI stack lock-in (mid-2026)](0005-ai-stack-lock-in.md)
