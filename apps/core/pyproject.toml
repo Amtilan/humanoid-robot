@@ -11,6 +11,7 @@ dependencies = [
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "typer>=0.15",
+    "psutil>=6.1",
     "humanoid-robot-domain",
     "humanoid-robot-events",
     "humanoid-robot-ports",

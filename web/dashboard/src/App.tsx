@@ -4,6 +4,7 @@ import {
   BookOpen,
   Bot,
   Boxes,
+  Gauge,
   LayoutDashboard,
   Puzzle,
   Radio,
@@ -13,6 +14,7 @@ import {
 
 import { AdaptersPage } from "./pages/AdaptersPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { DiagnosticsPage } from "./pages/DiagnosticsPage";
 import { EventsPage } from "./pages/EventsPage";
 import { KnowledgePage } from "./pages/KnowledgePage";
 import { PluginsPage } from "./pages/PluginsPage";
@@ -29,6 +31,7 @@ const navItems = [
   { to: "/adapters", label: "Adapters", icon: Boxes },
   { to: "/plugins", label: "Plugins", icon: Puzzle },
   { to: "/events", label: "Events", icon: Radio },
+  { to: "/diagnostics", label: "Diagnostics", icon: Gauge },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
@@ -68,6 +71,7 @@ export function App() {
           <Route path="/adapters" element={<AdaptersPage />} />
           <Route path="/plugins" element={<PluginsPage />} />
           <Route path="/events" element={<EventsPage />} />
+          <Route path="/diagnostics" element={<DiagnosticsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>

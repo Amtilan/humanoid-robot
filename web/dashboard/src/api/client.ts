@@ -112,6 +112,49 @@ export interface SettingsResponse {
   settings: Record<string, unknown>;
 }
 
+export interface CpuStats {
+  percent: number;
+  per_core_percent: number[];
+  load_avg_1m: number;
+  load_avg_5m: number;
+  load_avg_15m: number;
+  core_count: number;
+}
+
+export interface MemoryStats {
+  total_bytes: number;
+  used_bytes: number;
+  available_bytes: number;
+  percent: number;
+  swap_total_bytes: number;
+  swap_used_bytes: number;
+}
+
+export interface DiskStats {
+  path: string;
+  total_bytes: number;
+  used_bytes: number;
+  free_bytes: number;
+  percent: number;
+}
+
+export interface HostDiagnostics {
+  uptime_s: number;
+  cpu: CpuStats;
+  memory: MemoryStats;
+  disks: DiskStats[];
+}
+
+export interface GpuStats {
+  supported: boolean;
+  gpu_percent: number | null;
+  ram_used_bytes: number | null;
+  ram_total_bytes: number | null;
+  temperature_c: number | null;
+  power_w: number | null;
+  detail: string | null;
+}
+
 export interface KnowledgeSourceSummary {
   source_id: string;
   chunk_count: number;
@@ -162,4 +205,6 @@ export const api = {
   startIngest: (body: { directory: string; config_path: string }) =>
     postJson<IngestJobStatus, typeof body>("/api/v1/knowledge/ingest-jobs", body),
   ingestJobs: () => getJson<IngestJobStatus[]>("/api/v1/knowledge/ingest-jobs"),
+  diagnosticsHost: () => getJson<HostDiagnostics>("/api/v1/diagnostics/host"),
+  diagnosticsGpu: () => getJson<GpuStats>("/api/v1/diagnostics/gpu"),
 };
