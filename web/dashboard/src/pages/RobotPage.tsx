@@ -1,12 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { api, type RobotManifestSnapshot } from "../api/client";
+import {
+  useEventSubscription,
+  type EventEnvelope,
+} from "../lib/eventStream";
+
+const MAX_FEED = 40;
 
 export function RobotPage() {
   const manifestsQuery = useQuery({
     queryKey: ["robot", "manifests"],
     queryFn: api.robotManifests,
     refetchInterval: 5_000,
+  });
+  const [feed, setFeed] = useState<EventEnvelope[]>([]);
+  useEventSubscription("robot.>", (envelope) => {
+    setFeed((prev) => [envelope, ...prev].slice(0, MAX_FEED));
   });
 
   return (
@@ -35,6 +46,34 @@ export function RobotPage() {
           ))}
         </div>
       )}
+
+      <div className="rounded-lg border border-border bg-background/40 p-4">
+        <h2 className="pb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Live robot feed ({feed.length})
+        </h2>
+        {feed.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Subscribed to <code>robot.&gt;</code>. Waiting for commands / telemetry…
+          </p>
+        ) : (
+          <ul className="max-h-64 space-y-1 overflow-auto pr-1">
+            {feed.map((event) => (
+              <li
+                key={event.event_id}
+                className="flex items-center gap-3 rounded border border-border/40 bg-background/60 px-2 py-1 text-xs"
+              >
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {event.occurred_at.substring(11, 19)}
+                </span>
+                <span className="font-medium">{event.subject}</span>
+                <span className="truncate text-muted-foreground">
+                  {JSON.stringify(event.data).slice(0, 120)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

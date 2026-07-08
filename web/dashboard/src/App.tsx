@@ -6,6 +6,7 @@ import {
   Boxes,
   Gauge,
   LayoutDashboard,
+  Mic,
   Puzzle,
   Radio,
   Settings as SettingsIcon,
@@ -21,11 +22,13 @@ import { PluginsPage } from "./pages/PluginsPage";
 import { QaPage } from "./pages/QaPage";
 import { RobotPage } from "./pages/RobotPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { VoiceSessionsPage } from "./pages/VoiceSessionsPage";
 import { cn } from "./lib/cn";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/robot", label: "Robot", icon: Bot },
+  { to: "/voice", label: "Voice", icon: Mic },
   { to: "/knowledge", label: "Knowledge", icon: BookOpen },
   { to: "/qa", label: "QA test", icon: Sparkles },
   { to: "/adapters", label: "Adapters", icon: Boxes },
@@ -66,6 +69,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/robot" element={<RobotPage />} />
+          <Route path="/voice" element={<VoiceSessionsPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/qa" element={<QaPage />} />
           <Route path="/adapters" element={<AdaptersPage />} />
