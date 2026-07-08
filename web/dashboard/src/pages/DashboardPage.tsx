@@ -1,6 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { api } from "../api/client";
+import {
+  useEventStream,
+  useEventSubscription,
+  type EventEnvelope,
+} from "../lib/eventStream";
+
+const MAX_TAPE = 30;
 
 export function DashboardPage() {
   const infoQuery = useQuery({ queryKey: ["info"], queryFn: api.info });
@@ -11,13 +19,37 @@ export function DashboardPage() {
   });
   const groupsQuery = useQuery({ queryKey: ["groups"], queryFn: api.adapterGroups });
 
+  const { connected } = useEventStream();
+  const [tape, setTape] = useState<EventEnvelope[]>([]);
+  useEventSubscription(">", (envelope) => {
+    setTape((prev) => [envelope, ...prev].slice(0, MAX_TAPE));
+  });
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Live status of the humanoid-robot platform.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Live status of the humanoid-robot platform.
+          </p>
+        </div>
+        <span
+          className={
+            connected
+              ? "inline-flex items-center gap-1.5 text-xs text-emerald-400"
+              : "inline-flex items-center gap-1.5 text-xs text-yellow-400"
+          }
+        >
+          <span
+            className={
+              connected
+                ? "inline-block h-2 w-2 rounded-full bg-emerald-500"
+                : "inline-block h-2 w-2 animate-pulse rounded-full bg-yellow-500"
+            }
+          />
+          bus {connected ? "connected" : "reconnecting"}
+        </span>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -66,6 +98,29 @@ export function DashboardPage() {
           )}
         </Card>
       </div>
+
+      <Card title={`Live tape (${tape.length})`}>
+        {tape.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Waiting for the first event on the bus…
+          </p>
+        ) : (
+          <ul className="max-h-64 space-y-1 overflow-auto pr-1">
+            {tape.map((event) => (
+              <li
+                key={event.event_id}
+                className="flex items-center gap-3 rounded border border-border/40 bg-background/60 px-2 py-1 text-xs"
+              >
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {event.occurred_at.substring(11, 19)}
+                </span>
+                <span className="font-medium">{event.subject}</span>
+                <span className="text-muted-foreground">{event.producer}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
   );
 }

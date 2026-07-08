@@ -1,39 +1,27 @@
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
-interface EventEnvelope {
-  subject: string;
-  event_id: string;
-  occurred_at: string;
-  correlation_id: string;
-  producer: string;
-  data: Record<string, unknown>;
-}
+import {
+  useEventStream,
+  useEventSubscription,
+  type EventEnvelope,
+} from "../lib/eventStream";
 
 const MAX_EVENTS = 200;
 
 export function EventsPage() {
-  const [subject, setSubject] = useState(">");
+  const [pattern, setPattern] = useState(">");
   const [events, setEvents] = useState<EventEnvelope[]>([]);
-  const [connected, setConnected] = useState(false);
-  const socketRef = useRef<WebSocket | null>(null);
+  const { connected } = useEventStream();
 
-  useEffect(() => {
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const url = `${proto}://${location.host}/api/v1/events/ws?subject=${encodeURIComponent(subject)}`;
-    const ws = new WebSocket(url);
-    socketRef.current = ws;
-    ws.onopen = () => setConnected(true);
-    ws.onclose = () => setConnected(false);
-    ws.onmessage = (msg) => {
-      try {
-        const envelope = JSON.parse(msg.data) as EventEnvelope;
-        setEvents((prev) => [envelope, ...prev].slice(0, MAX_EVENTS));
-      } catch {
-        // ignore malformed
-      }
-    };
-    return () => ws.close();
-  }, [subject]);
+  useEventSubscription(pattern, (envelope) => {
+    setEvents((prev) => [envelope, ...prev].slice(0, MAX_EVENTS));
+  });
+
+  const stats = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const ev of events) counts.set(ev.subject, (counts.get(ev.subject) ?? 0) + 1);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  }, [events]);
 
   return (
     <div className="space-y-6">
@@ -45,31 +33,37 @@ export function EventsPage() {
       </div>
 
       <div className="flex items-center gap-3">
-        <label className="text-sm text-muted-foreground">Subject</label>
+        <label className="text-sm text-muted-foreground">Subject filter</label>
         <input
           type="text"
-          value={subject}
-          onChange={(e) => setSubject(e.target.value)}
+          value={pattern}
+          onChange={(e) => setPattern(e.target.value)}
           placeholder="e.g. asr.>"
           className="w-64 rounded-md border border-border bg-background/40 px-3 py-1 text-sm"
         />
-        <span
-          className={
-            connected
-              ? "inline-flex items-center gap-1.5 text-xs text-emerald-400"
-              : "inline-flex items-center gap-1.5 text-xs text-muted-foreground"
-          }
+        <ConnectionBadge connected={connected} />
+        <button
+          type="button"
+          onClick={() => setEvents([])}
+          className="ml-auto rounded-md border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
         >
-          <span
-            className={
-              connected
-                ? "inline-block h-2 w-2 rounded-full bg-emerald-500"
-                : "inline-block h-2 w-2 rounded-full bg-muted-foreground"
-            }
-          />
-          {connected ? "connected" : "reconnecting"}
-        </span>
+          clear
+        </button>
       </div>
+
+      {stats.length > 0 && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          {stats.map(([subject, count]) => (
+            <span
+              key={subject}
+              className="rounded-full border border-border bg-background/40 px-2 py-0.5"
+            >
+              <span className="font-mono text-muted-foreground">{subject}</span>
+              <span className="ml-1 text-primary">×{count}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="rounded-lg border border-border bg-background/40">
         <table className="w-full text-left text-xs">
@@ -106,5 +100,26 @@ export function EventsPage() {
         </table>
       </div>
     </div>
+  );
+}
+
+function ConnectionBadge({ connected }: { connected: boolean }) {
+  return (
+    <span
+      className={
+        connected
+          ? "inline-flex items-center gap-1.5 text-xs text-emerald-400"
+          : "inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+      }
+    >
+      <span
+        className={
+          connected
+            ? "inline-block h-2 w-2 rounded-full bg-emerald-500"
+            : "inline-block h-2 w-2 animate-pulse rounded-full bg-yellow-500"
+        }
+      />
+      {connected ? "connected" : "reconnecting"}
+    </span>
   );
 }
