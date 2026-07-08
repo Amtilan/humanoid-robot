@@ -23,6 +23,7 @@ import { QaPage } from "./pages/QaPage";
 import { RobotPage } from "./pages/RobotPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { VoiceSessionsPage } from "./pages/VoiceSessionsPage";
+import { MicActivity } from "./lib/micActivity";
 import { cn } from "./lib/cn";
 
 const navItems = [
@@ -42,9 +43,12 @@ export function App() {
   return (
     <div className="flex h-full">
       <aside className="flex w-64 flex-col border-r border-border bg-background/50 p-4">
-        <div className="flex items-center gap-2 pb-6">
+        <div className="flex items-center gap-2 pb-4">
           <Activity className="h-5 w-5 text-primary" />
           <span className="text-sm font-semibold">humanoid-robot</span>
+        </div>
+        <div className="pb-4">
+          <MicActivity />
         </div>
         <nav className="flex flex-col gap-1">
           {navItems.map(({ to, label, icon: Icon }) => (

@@ -4,7 +4,9 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 
 import { App } from "./App";
+import { BusToastBridge } from "./lib/busToasts";
 import { EventStreamProvider } from "./lib/eventStream";
+import { ToastProvider } from "./lib/toast";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -20,9 +22,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <EventStreamProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <ToastProvider>
+          <BusToastBridge />
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </ToastProvider>
       </EventStreamProvider>
     </QueryClientProvider>
   </React.StrictMode>,
