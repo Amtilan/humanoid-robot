@@ -118,6 +118,7 @@ ignore = [
 "packages/humanoid-robot-adapters-embed-bge/src/humanoid_robot/adapters/embed_bge/adapter.py" = ["ANN401"]
 "packages/humanoid-robot-adapters-rerank-bge/src/humanoid_robot/adapters/rerank_bge/adapter.py" = ["ANN401"]
 "packages/humanoid-robot-adapters-vector-qdrant/src/humanoid_robot/adapters/vector_qdrant/adapter.py" = ["ANN401", "RUF100"]
+"packages/humanoid-robot-adapters-parser-docling/src/humanoid_robot/adapters/parser_docling/parsers.py" = ["ANN401"]
 # Russian docstrings and prompt templates trip Ruff's ambiguous-Unicode rule;
 # enum reuses PASS as an intentional taxonomy name (not a password).
 "apps/rag/src/humanoid_robot/rag/grounded_qa.py" = ["RUF001", "RUF002", "S105"]
@@ -200,6 +201,7 @@ mypy_path = [
     "packages/humanoid-robot-adapters-rerank-bge/src",
     "packages/humanoid-robot-adapters-vector-qdrant/src",
     "packages/humanoid-robot-adapters-parser-basic/src",
+    "packages/humanoid-robot-adapters-parser-docling/src",
     "packages/humanoid-robot-adapters-chunker-token/src",
     "apps/core/src",
     "apps/robot-adapter/src",
@@ -232,6 +234,8 @@ module = [
     "FlagEmbedding",
     "qdrant_client",
     "qdrant_client.*",
+    "docling",
+    "docling.*",
 ]
 ignore_missing_imports = true
 
