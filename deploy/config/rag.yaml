@@ -1,0 +1,55 @@
+# Reference configuration for cortex-rag.
+#
+# Copy to /etc/humanoid-robot/rag.yaml and edit for your deployment.
+# Environment variables HR_RAG__* override any value defined here.
+
+environment: prod
+service_name: cortex-rag
+log_level: INFO
+
+nats:
+  servers:
+    - nats://127.0.0.1:4222
+  client_name: cortex-rag
+
+qa:
+  top_k_retrieve: 8
+  top_k_after_rerank: 4
+  min_top1_rerank_score: 0.35
+  min_chunk_coverage: 2
+  max_answer_tokens: 768
+  max_retries_on_citation_fail: 1
+
+# Which adapter to load per port. Names refer to entry_points registered by
+# the installed adapter distributions.
+#   llm_adapters:       llama_cpp
+#   embedding_adapters: bge_m3
+#   reranker_adapters:  bge_reranker_v2_m3
+#   vector_adapters:    qdrant_local
+stack:
+  llm:
+    name: llama_cpp
+    config:
+      base_url: http://127.0.0.1:8080
+      model: qwen3-8b-instruct-q4_k_m
+      request_timeout_s: 60.0
+  embedder:
+    name: bge_m3
+    config:
+      model_name: BAAI/bge-m3
+      device: cuda
+      use_fp16: true
+      max_length: 8192
+  reranker:
+    name: bge_reranker_v2_m3
+    config:
+      model_name: BAAI/bge-reranker-v2-m3
+      device: cuda
+      use_fp16: true
+  vector_store:
+    name: qdrant_local
+    config:
+      local_path: /var/lib/humanoid-robot/qdrant
+      collection: knowledge
+      dense_dim: 1024
+      upsert_batch_size: 64

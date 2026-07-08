@@ -81,9 +81,7 @@ class QdrantLocalStore:
                     "ordinal": chunk.ordinal,
                 }
                 payload.update(chunk.metadata)
-                points.append(
-                    {"id": chunk.id, "vector": list(vec), "payload": payload}
-                )
+                points.append({"id": chunk.id, "vector": list(vec), "payload": payload})
             await self._run(
                 lambda p=points: client.upsert(
                     collection_name=self.config.collection,
