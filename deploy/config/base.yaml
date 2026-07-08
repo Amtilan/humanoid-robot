@@ -1,0 +1,28 @@
+# Reference configuration for cortex-core.
+#
+# Copy to /etc/humanoid-robot/config.yaml on the robot and edit as needed.
+# Environment variables (HR_*) override any value defined here.
+
+environment: prod
+service_name: cortex-core
+
+http:
+  host: 0.0.0.0
+  port: 8080
+
+nats:
+  servers:
+    - nats://127.0.0.1:4222
+  client_name: cortex-core
+  connect_timeout_s: 5.0
+  reconnect_time_wait_s: 1.0
+  max_reconnect_attempts: -1
+  # user_credentials: /etc/humanoid-robot/nats.creds
+  # tls_ca: /etc/humanoid-robot/tls/ca.pem
+  # tls_cert: /etc/humanoid-robot/tls/cortex-core.pem
+  # tls_key: /etc/humanoid-robot/tls/cortex-core.key
+
+observability:
+  log_level: INFO
+  otlp_endpoint: http://127.0.0.1:4318/v1/traces
+  tracing_enabled: true

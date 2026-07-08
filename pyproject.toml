@@ -36,6 +36,7 @@ dev = [
     "import-linter>=2.1",
     "commitizen>=3.30",
     "types-PyYAML>=6.0",
+    "httpx2>=1.0",
 ]
 
 [tool.uv]
@@ -88,6 +89,11 @@ ignore = [
 # `__init__.py` re-exports are naturally alphabetically-unsortable across
 # subpackages; ruff isort tries to reorder them and thrash the file.
 "**/__init__.py" = ["I001"]
+# Typer relies on `typer.Option(...)` as function default; PLC0415 lazy imports
+# are intentional inside FastAPI/uvicorn entrypoints to keep startup fast and
+# avoid circular imports.
+"apps/core/src/humanoid_robot/core/__main__.py" = ["B008"]
+"apps/core/src/humanoid_robot/core/app.py" = ["PLC0415"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["humanoid_robot"]
@@ -125,6 +131,9 @@ mypy_path = [
     "packages/humanoid-robot-events/src",
     "packages/humanoid-robot-ports/src",
     "packages/humanoid-robot-testing/src",
+    "packages/humanoid-robot-adapters-nats/src",
+    "packages/humanoid-robot-observability/src",
+    "apps/core/src",
 ]
 exclude = [
     "^\\.venv/",
@@ -136,6 +145,12 @@ exclude = [
 module = "tests.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
+
+# nats-py ships partial types; we accept the untyped surfaces for now and
+# revisit if we hit issues.
+[[tool.mypy.overrides]]
+module = ["nats.*"]
+ignore_missing_imports = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true
