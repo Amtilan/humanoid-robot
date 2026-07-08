@@ -1,0 +1,35 @@
+[project]
+name = "humanoid-robot-voice"
+version = "0.0.0"
+description = "cortex-voice — orchestrates the voice pipeline over the event bus."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "typer>=0.15",
+    "PyYAML>=6.0",
+    "humanoid-robot-domain",
+    "humanoid-robot-events",
+    "humanoid-robot-ports",
+    "humanoid-robot-adapters-nats",
+    "humanoid-robot-observability",
+]
+
+[tool.uv.sources]
+humanoid-robot-domain = { workspace = true }
+humanoid-robot-events = { workspace = true }
+humanoid-robot-ports = { workspace = true }
+humanoid-robot-adapters-nats = { workspace = true }
+humanoid-robot-observability = { workspace = true }
+
+[project.scripts]
+cortex-voice = "humanoid_robot.voice.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/humanoid_robot"]

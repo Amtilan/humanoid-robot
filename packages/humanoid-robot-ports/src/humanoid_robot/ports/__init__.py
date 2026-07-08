@@ -19,6 +19,7 @@ from humanoid_robot.ports.knowledge import (
 )
 from humanoid_robot.ports.robot import (
     ArmPort,
+    AudioFrame,
     AudioInPort,
     AudioOutPort,
     BatteryPort,
@@ -26,11 +27,18 @@ from humanoid_robot.ports.robot import (
     LocomotionPort,
     RobotAdapterPort,
 )
+from humanoid_robot.ports.voice import (
+    VadDecision,
+    VadPort,
+    WakeWordEvent,
+    WakeWordPort,
+)
 
 __all__ = [
     "ArmPort",
     "AsrPort",
     "AsrStreamChunk",
+    "AudioFrame",
     "AudioInPort",
     "AudioOutPort",
     "BatteryPort",
@@ -49,5 +57,9 @@ __all__ = [
     "Subscription",
     "TtsPort",
     "TtsRequest",
+    "VadDecision",
+    "VadPort",
     "VectorStorePort",
+    "WakeWordEvent",
+    "WakeWordPort",
 ]
