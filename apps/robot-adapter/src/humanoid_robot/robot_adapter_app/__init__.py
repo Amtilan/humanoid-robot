@@ -1,0 +1,1 @@
+"""Robot adapter runner app."""

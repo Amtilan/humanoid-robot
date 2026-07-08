@@ -1,0 +1,29 @@
+[project]
+name = "humanoid-robot-contract-tests"
+version = "0.0.0"
+description = "Reusable pytest suites every adapter must pass."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pydantic>=2.9",
+    "humanoid-robot-domain",
+    "humanoid-robot-events",
+    "humanoid-robot-ports",
+    "humanoid-robot-testing",
+]
+
+[tool.uv.sources]
+humanoid-robot-domain = { workspace = true }
+humanoid-robot-events = { workspace = true }
+humanoid-robot-ports = { workspace = true }
+humanoid-robot-testing = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/humanoid_robot"]

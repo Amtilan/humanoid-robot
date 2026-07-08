@@ -94,6 +94,19 @@ ignore = [
 # avoid circular imports.
 "apps/core/src/humanoid_robot/core/__main__.py" = ["B008"]
 "apps/core/src/humanoid_robot/core/app.py" = ["PLC0415"]
+"apps/robot-adapter/src/humanoid_robot/robot_adapter_app/__main__.py" = ["B008"]
+# Adapter and plugin factories must accept arbitrary kwargs by design — the
+# concrete shape is defined by each adapter's own settings model.
+"packages/humanoid-robot-plugins-sdk/src/humanoid_robot/plugins_sdk/registry.py" = ["ANN401"]
+"packages/humanoid-robot-adapters-unitree-g1/src/humanoid_robot/adapters/unitree_g1/adapter.py" = ["ANN401"]
+# Contract-test helpers legitimately use `assert` — that's their whole job.
+"packages/humanoid-robot-contract-tests/src/**/*.py" = ["S101"]
+# The lazy SDK cache is one variable behind a get/reset pair; a module-level
+# global is the clearest expression of that pattern.
+"packages/humanoid-robot-adapters-unitree-g1/src/humanoid_robot/adapters/unitree_g1/sdk.py" = ["PLW0603"]
+# One-shot HITL script relies on `except Exception:` at the top level to
+# guarantee the process exits with a helpful message.
+"scripts/hitl_g1_smoke.py" = ["RUF100"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["humanoid_robot"]
@@ -133,7 +146,11 @@ mypy_path = [
     "packages/humanoid-robot-testing/src",
     "packages/humanoid-robot-adapters-nats/src",
     "packages/humanoid-robot-observability/src",
+    "packages/humanoid-robot-plugins-sdk/src",
+    "packages/humanoid-robot-contract-tests/src",
+    "packages/humanoid-robot-adapters-unitree-g1/src",
     "apps/core/src",
+    "apps/robot-adapter/src",
 ]
 exclude = [
     "^\\.venv/",
