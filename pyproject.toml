@@ -208,6 +208,7 @@ mypy_path = [
     "apps/voice/src",
     "apps/rag/src",
     "apps/ingest/src",
+    "plugins/hello/src",
 ]
 exclude = [
     "^\\.venv/",

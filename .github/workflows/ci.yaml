@@ -81,6 +81,26 @@ jobs:
       - run: uv sync --all-packages --dev
       - run: uv run pre-commit run --all-files --show-diff-on-failure
 
+  dashboard:
+    name: dashboard (web/dashboard)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: web/dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11.0.8"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: web/dashboard/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc -b --noEmit
+      - run: pnpm exec vite build
+
   security-scan:
     name: security-scan
     runs-on: ubuntu-24.04
