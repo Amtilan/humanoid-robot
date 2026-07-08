@@ -21,8 +21,17 @@ session:
   wake_word_grace_ms: 1500
 
 # Which adapter to load for each port. Names refer to entry_points registered
-# by the installed adapter distributions.
+# by the installed adapter distributions. Currently available names:
+#   audio_in_adapters:  alsa | unitree_g1 | null
+#   audio_out_adapters: unitree_g1 | null
+#   vad_adapters:       silero_v5
+#   asr_adapters:       faster_whisper
+#   tts_adapters:       piper
+#   wakeword_adapters:  openwakeword
 stack:
+  # Production on G1: replace `alsa` with `unitree_g1` and drop the `device`
+  # setting; the G1 mic feeds a 6-channel multicast stream that the adapter
+  # downmixes internally.
   audio_in:
     name: alsa
     config:
@@ -30,13 +39,16 @@ stack:
       sample_rate_hz: 16000
       channels: 1
       frame_ms: 50
+  # Production on G1: `unitree_g1` uses the vendor SDK AudioClient — it will
+  # init DDS on `network_interface` on first use. Use `null` in CI or on a
+  # dev laptop where nothing should actually make a sound.
   audio_out:
-    # cortex-voice does not ship a first-class audio_out adapter yet — the
-    # Unitree G1 speaker port is instantiated by the robot-adapter runner
-    # and shared via NATS in a later milestone. For now, `stack.audio_out`
-    # must point at a factory the operator provides.
-    name: null_playback
+    name: null
     config: {}
+    # name: unitree_g1
+    # config:
+    #   network_interface: eth10
+    #   volume_pct: 100
   vad:
     name: silero_v5
     config: {}

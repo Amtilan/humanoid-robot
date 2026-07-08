@@ -19,6 +19,7 @@ dependencies = [
     # opt-in per-target — dev laptops still get the code path exercised
     # through injected fakes.
     "humanoid-robot-adapters-audio-alsa",
+    "humanoid-robot-adapters-audio-null",
     "humanoid-robot-adapters-asr-whisper",
     "humanoid-robot-adapters-tts-piper",
     "humanoid-robot-adapters-vad-silero",
@@ -32,6 +33,7 @@ humanoid-robot-ports = { workspace = true }
 humanoid-robot-adapters-nats = { workspace = true }
 humanoid-robot-observability = { workspace = true }
 humanoid-robot-adapters-audio-alsa = { workspace = true }
+humanoid-robot-adapters-audio-null = { workspace = true }
 humanoid-robot-adapters-asr-whisper = { workspace = true }
 humanoid-robot-adapters-tts-piper = { workspace = true }
 humanoid-robot-adapters-vad-silero = { workspace = true }

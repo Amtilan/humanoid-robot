@@ -20,6 +20,12 @@ unitree = []  # placeholder; enforced by the lazy loader in `_sdk.py`
 [project.entry-points."humanoid_robot.robot_adapters"]
 unitree_g1_edu = "humanoid_robot.adapters.unitree_g1.adapter:UnitreeG1Adapter"
 
+[project.entry-points."humanoid_robot.audio_in_adapters"]
+unitree_g1 = "humanoid_robot.adapters.unitree_g1.factories:unitree_g1_audio_in"
+
+[project.entry-points."humanoid_robot.audio_out_adapters"]
+unitree_g1 = "humanoid_robot.adapters.unitree_g1.factories:unitree_g1_audio_out"
+
 [tool.uv.sources]
 humanoid-robot-domain = { workspace = true }
 humanoid-robot-ports = { workspace = true }

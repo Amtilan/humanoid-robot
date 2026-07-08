@@ -13,6 +13,7 @@ members = [
     "humanoid-robot",
     "humanoid-robot-adapters-asr-whisper",
     "humanoid-robot-adapters-audio-alsa",
+    "humanoid-robot-adapters-audio-null",
     "humanoid-robot-adapters-nats",
     "humanoid-robot-adapters-tts-piper",
     "humanoid-robot-adapters-unitree-g1",
@@ -867,6 +868,23 @@ requires-dist = [
 ]
 
 [[package]]
+name = "humanoid-robot-adapters-audio-null"
+version = "0.0.0"
+source = { editable = "packages/humanoid-robot-adapters-audio-null" }
+dependencies = [
+    { name = "humanoid-robot-domain" },
+    { name = "humanoid-robot-ports" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "humanoid-robot-domain", editable = "packages/humanoid-robot-domain" },
+    { name = "humanoid-robot-ports", editable = "packages/humanoid-robot-ports" },
+    { name = "pydantic", specifier = ">=2.9" },
+]
+
+[[package]]
 name = "humanoid-robot-adapters-nats"
 version = "0.0.0"
 source = { editable = "packages/humanoid-robot-adapters-nats" }
@@ -1181,6 +1199,7 @@ source = { editable = "apps/voice" }
 dependencies = [
     { name = "humanoid-robot-adapters-asr-whisper" },
     { name = "humanoid-robot-adapters-audio-alsa" },
+    { name = "humanoid-robot-adapters-audio-null" },
     { name = "humanoid-robot-adapters-nats" },
     { name = "humanoid-robot-adapters-tts-piper" },
     { name = "humanoid-robot-adapters-vad-silero" },
@@ -1199,6 +1218,7 @@ dependencies = [
 requires-dist = [
     { name = "humanoid-robot-adapters-asr-whisper", editable = "packages/humanoid-robot-adapters-asr-whisper" },
     { name = "humanoid-robot-adapters-audio-alsa", editable = "packages/humanoid-robot-adapters-audio-alsa" },
+    { name = "humanoid-robot-adapters-audio-null", editable = "packages/humanoid-robot-adapters-audio-null" },
     { name = "humanoid-robot-adapters-nats", editable = "packages/humanoid-robot-adapters-nats" },
     { name = "humanoid-robot-adapters-tts-piper", editable = "packages/humanoid-robot-adapters-tts-piper" },
     { name = "humanoid-robot-adapters-vad-silero", editable = "packages/humanoid-robot-adapters-vad-silero" },

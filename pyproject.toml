@@ -180,6 +180,7 @@ mypy_path = [
     "packages/humanoid-robot-adapters-vad-silero/src",
     "packages/humanoid-robot-adapters-wakeword-openwakeword/src",
     "packages/humanoid-robot-adapters-audio-alsa/src",
+    "packages/humanoid-robot-adapters-audio-null/src",
     "apps/core/src",
     "apps/robot-adapter/src",
     "apps/voice/src",
