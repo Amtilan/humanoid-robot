@@ -1,0 +1,43 @@
+[project]
+name = "humanoid-robot-rag"
+version = "0.0.0"
+description = "cortex-rag — grounded QA orchestrator (retrieval + LLM + guardrails)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "typer>=0.15",
+    "PyYAML>=6.0",
+    "humanoid-robot-domain",
+    "humanoid-robot-events",
+    "humanoid-robot-ports",
+    "humanoid-robot-adapters-nats",
+    "humanoid-robot-observability",
+    "humanoid-robot-adapters-llm-llamacpp",
+    "humanoid-robot-adapters-embed-bge",
+    "humanoid-robot-adapters-rerank-bge",
+    "humanoid-robot-adapters-vector-qdrant",
+]
+
+[tool.uv.sources]
+humanoid-robot-domain = { workspace = true }
+humanoid-robot-events = { workspace = true }
+humanoid-robot-ports = { workspace = true }
+humanoid-robot-adapters-nats = { workspace = true }
+humanoid-robot-observability = { workspace = true }
+humanoid-robot-adapters-llm-llamacpp = { workspace = true }
+humanoid-robot-adapters-embed-bge = { workspace = true }
+humanoid-robot-adapters-rerank-bge = { workspace = true }
+humanoid-robot-adapters-vector-qdrant = { workspace = true }
+
+[project.scripts]
+cortex-rag = "humanoid_robot.rag.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/humanoid_robot"]

@@ -1,0 +1,29 @@
+[project]
+name = "humanoid-robot-adapters-rerank-bge"
+version = "0.0.0"
+description = "RerankerPort via BGE-Reranker v2-m3."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "pydantic>=2.9",
+    "humanoid-robot-domain",
+    "humanoid-robot-ports",
+]
+
+[project.optional-dependencies]
+runtime = ["FlagEmbedding>=1.3", "torch>=2.2", "transformers>=4.44"]
+
+[project.entry-points."humanoid_robot.reranker_adapters"]
+bge_reranker_v2_m3 = "humanoid_robot.adapters.rerank_bge.adapter:build_bge_reranker"
+
+[tool.uv.sources]
+humanoid-robot-domain = { workspace = true }
+humanoid-robot-ports = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/humanoid_robot"]

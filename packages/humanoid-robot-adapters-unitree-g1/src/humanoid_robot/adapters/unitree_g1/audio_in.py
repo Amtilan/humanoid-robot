@@ -1,14 +1,14 @@
-"""G1 microphone — `AudioInPort` implementation.
+"""G1 microphone — ``AudioInPort`` implementation.
 
-The G1 head microphone array multicasts raw audio to a UDP group at
-`239.168.123.161:5555` (per Unitree docs + the `g1_intelligence` reference
-prototype). Payload is a 16 kHz mono PCM16 stream; some firmwares emit a
+The G1 head microphone array multicasts raw audio to a UDP class-D
+(multicast) group; the default group and port are documented as constants
+below.  Payload is a 16 kHz mono PCM16 stream; some firmwares emit a
 6-channel far-field mix that we downmix to mono here (channel 0 tends to
 be the beamformed centre).
 
-The port yields `AudioFrame`s. The socket is opened lazily on first
-`stream()` iteration; if that fails, the exception surfaces to the caller
-so the runner can escalate.
+The port yields ``AudioFrame`` objects.  The socket is opened lazily on
+first ``stream()`` iteration; if that fails, the exception surfaces to
+the caller so the runner can escalate.
 """
 
 from __future__ import annotations
@@ -26,9 +26,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from humanoid_robot.domain.voice import AudioFormat
 from humanoid_robot.ports.robot import AudioFrame
 
-_DEFAULT_GROUP = "239.168.123.161"
+_DEFAULT_GROUP = "239.168.123.161"  # pragma: allowlist secret
 _DEFAULT_PORT = 5555
-_DEFAULT_LOCAL_IP = "0.0.0.0"  # noqa: S104 — multicast join needs INADDR_ANY
+_DEFAULT_LOCAL_IP = "0.0.0.0"  # noqa: S104  # pragma: allowlist secret
 _DEFAULT_RECV_BUFFER_BYTES = 4096
 _DEFAULT_SAMPLE_RATE_HZ = 16_000
 _DEFAULT_CHANNELS = 1

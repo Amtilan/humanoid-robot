@@ -102,3 +102,10 @@ class EmbeddingPort(Protocol):
 
     @property
     def dimension(self) -> int: ...
+
+
+@runtime_checkable
+class RerankerPort(Protocol):
+    """Cross-encoder reranker — returns a per-passage relevance score in [0, 1]."""
+
+    async def rerank(self, query: str, passages: tuple[str, ...]) -> tuple[float, ...]: ...

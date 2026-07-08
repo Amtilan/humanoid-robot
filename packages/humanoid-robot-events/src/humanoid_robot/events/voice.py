@@ -68,6 +68,7 @@ class LlmAnswer(BaseEvent):
 
     session_id: SessionId
     text: str
+    language: Language = Language.RU
     citations: tuple[Citation, ...]
     confidence: float = Field(ge=0.0, le=1.0)
 

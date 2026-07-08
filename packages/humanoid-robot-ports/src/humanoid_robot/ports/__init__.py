@@ -7,6 +7,7 @@ from humanoid_robot.ports.ai import (
     LlmPort,
     LlmRequest,
     LlmResponse,
+    RerankerPort,
     TtsPort,
     TtsRequest,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "LlmRequest",
     "LlmResponse",
     "LocomotionPort",
+    "RerankerPort",
     "RetrievalQuery",
     "RobotAdapterPort",
     "Subscription",

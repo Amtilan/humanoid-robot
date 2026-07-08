@@ -115,6 +115,12 @@ ignore = [
 "packages/humanoid-robot-adapters-asr-whisper/src/humanoid_robot/adapters/asr_whisper/adapter.py" = ["ANN401"]
 "packages/humanoid-robot-adapters-tts-piper/src/humanoid_robot/adapters/tts_piper/adapter.py" = ["ANN401"]
 "packages/humanoid-robot-adapters-vad-silero/src/humanoid_robot/adapters/vad_silero/adapter.py" = ["ANN401"]
+"packages/humanoid-robot-adapters-embed-bge/src/humanoid_robot/adapters/embed_bge/adapter.py" = ["ANN401"]
+"packages/humanoid-robot-adapters-rerank-bge/src/humanoid_robot/adapters/rerank_bge/adapter.py" = ["ANN401"]
+"packages/humanoid-robot-adapters-vector-qdrant/src/humanoid_robot/adapters/vector_qdrant/adapter.py" = ["ANN401", "RUF100"]
+# Russian docstrings and prompt templates trip Ruff's ambiguous-Unicode rule;
+# enum reuses PASS as an intentional taxonomy name (not a password).
+"apps/rag/src/humanoid_robot/rag/grounded_qa.py" = ["RUF001", "RUF002", "S105"]
 "packages/humanoid-robot-adapters-wakeword-openwakeword/src/humanoid_robot/adapters/wakeword_openwakeword/adapter.py" = ["ANN401"]
 "apps/voice/src/humanoid_robot/voice/__main__.py" = ["B008"]
 "apps/voice/src/humanoid_robot/voice/composition.py" = ["ANN401"]
@@ -181,9 +187,14 @@ mypy_path = [
     "packages/humanoid-robot-adapters-wakeword-openwakeword/src",
     "packages/humanoid-robot-adapters-audio-alsa/src",
     "packages/humanoid-robot-adapters-audio-null/src",
+    "packages/humanoid-robot-adapters-llm-llamacpp/src",
+    "packages/humanoid-robot-adapters-embed-bge/src",
+    "packages/humanoid-robot-adapters-rerank-bge/src",
+    "packages/humanoid-robot-adapters-vector-qdrant/src",
     "apps/core/src",
     "apps/robot-adapter/src",
     "apps/voice/src",
+    "apps/rag/src",
 ]
 exclude = [
     "^\\.venv/",
@@ -207,6 +218,9 @@ module = [
     "faster_whisper",
     "silero_vad",
     "openwakeword.*",
+    "FlagEmbedding",
+    "qdrant_client",
+    "qdrant_client.*",
 ]
 ignore_missing_imports = true
 
