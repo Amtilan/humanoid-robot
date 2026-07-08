@@ -37,9 +37,7 @@ def _host() -> HostDiagnostics:
             swap_total_bytes=0,
             swap_used_bytes=0,
         ),
-        disks=[
-            DiskStats(path="/", total_bytes=1, used_bytes=1, free_bytes=0, percent=100.0)
-        ],
+        disks=[DiskStats(path="/", total_bytes=1, used_bytes=1, free_bytes=0, percent=100.0)],
     )
 
 
