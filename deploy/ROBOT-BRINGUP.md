@@ -123,15 +123,16 @@ online interface.
   with the vendor gesture list, hands=none. **Safety gate stayed
   fail-closed** (`estop_engaged=true`, `pending_command_count=0`) — zero
   motion.
-- **Finding (B2.5, next):** the telemetry *pipeline* is proven end-to-end
-  (adapter → NATS → core cache → `/api/v1/robot/telemetry`, fresh
-  timestamps) but the **values are empty** (battery 0.0, imu/temperature
-  `{}`). Root cause: `battery.py` / `imu.py` / `temperature.py` expose the
-  port + a `set_*` hook but nothing wires a DDS `rt/lowstate`
-  (`LowState_`) subscriber to push real values on each tick. `start()`
-  only does `ChannelFactoryInitialize`. **Next real task:** implement the
-  lowstate subscriber (bms_state → battery, imu_state → imu, motor temps
-  → temperature) and feed the existing ports.
+- **B2.5 (done 2026-07-10):** `lowstate.py` subscribes to `rt/lowstate`
+  (`unitree_hg LowState_`) and feeds the IMU + temperature ports via
+  their `source` hook (sync getter — no thread hop). Verified live on the
+  robot: `/api/v1/robot/telemetry` now returns real IMU
+  (`accel_z ≈ 9.86` = gravity, so orientation is physically correct;
+  roll/pitch/yaw, gyro, quaternion all populated) and real temperatures
+  (imu board ~80 °C, motor_max/mean across 35 motors). Adapter logs
+  `unitree_g1.lowstate_subscribed` → `g1.lowstate.first_frame`. Safety
+  gate stayed fail-closed. **Battery still 0.0** — `unitree_hg LowState_`
+  has no BMS field, so SOC needs a dedicated topic (B2.6 follow-up).
 
 The real adapter is left **running** (read-only, gate closed). Revert to
 mock: `cd /opt/humanoid-robot && sudo docker compose -f docker-compose.yaml
