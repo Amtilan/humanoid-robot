@@ -184,14 +184,26 @@ knows about it. JetPack ships it by default. On stock Ubuntu install
 `/etc/docker/daemon.json` (or leave the default runtime alone and
 this overlay's `runtime: nvidia` still takes effect).
 
-The overlay also swaps voice/rag onto the arm64-only
-`humanoid-robot-base-jetson` image, which is rooted on
-`dustynv/l4t-pytorch:r36.2.0` (JetPack 6.0 GA — the community
-jetson-containers mirror on Docker Hub, no NGC auth required).
-That base ships CUDA + cuDNN + torch built for Tegra, so
-`faster-whisper`, BGE-M3 and llama.cpp all reach the iGPU when the
-overlay is active. Bump the L4T-PyTorch tag in
-`deploy/docker/base-jetson.Dockerfile` alongside any JetPack move.
+**Current CUDA status.** The overlay only wires the NVIDIA runtime;
+voice/rag still run the CPU base image and fall back to CPU torch on
+Jetson.  The natural fix — root the services on
+`dustynv/l4t-pytorch` — hits a hard incompatibility: JetPack 6's
+Tegra torch is built against Python 3.10, but the workspace requires
+Python 3.12 (`StrEnum`, and pinned via `requires-python`).  Building
+a 3.12 venv on top of the L4T base gives us Python 3.12 with a torch
+that can't import, so it defeats the point.
+
+The path forward is one of:
+
+- Bake CUDA-aware inference libs (llama.cpp + cuBLAS, CTranslate2
+  + CUDA) into the CPU base itself — Python stays 3.12, no vendor
+  torch, GPU still reachable for the primitives voice/rag actually
+  call.  Most likely the next round.
+- Ship a second, arm64-only inference service running on the L4T
+  base with pinned Python 3.10, exposed to voice/rag over NATS.
+
+Until either lands, `runtime: nvidia` is dormant — you're paying
+zero for it, but you're also not getting GPU acceleration.
 
 Switch to the real robot:
 

@@ -26,16 +26,22 @@
 # Jetson-native base variant (nvcr.io/nvidia/l4t-*) lands in a
 # follow-up round; this overlay establishes the plumbing.
 
+# Jetson overlay.  Adds NVIDIA container runtime to voice/rag so the
+# Tegra iGPU shows up inside the container.  We DO NOT swap the base
+# image — the CPU base runs fine on Jetson, and voice/rag currently
+# fall back to CPU inference because a Python-3.12-compatible CUDA
+# torch wheel for arm64 doesn't exist yet.  When we ship a proper
+# CUDA base (either llama.cpp + CTranslate2 with cuBLAS baked into
+# the CPU base, or a Python-3.10-compat inference container), this
+# overlay is where the image: swap goes.
 services:
   voice:
-    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_OWNER:-amtilan}/humanoid-robot-base-jetson:${IMAGE_TAG:-main}
     runtime: nvidia
     environment:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
 
   rag:
-    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_OWNER:-amtilan}/humanoid-robot-base-jetson:${IMAGE_TAG:-main}
     runtime: nvidia
     environment:
       NVIDIA_VISIBLE_DEVICES: all

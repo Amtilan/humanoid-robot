@@ -44,7 +44,6 @@ OIDC_ISSUER="https://token.actions.githubusercontent.com"
 DEFAULT_IMAGES=(
     "humanoid-robot-base"
     "humanoid-robot-dashboard"
-    "humanoid-robot-base-jetson"
 )
 
 if [[ $# -gt 0 ]]; then

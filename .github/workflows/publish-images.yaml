@@ -52,10 +52,6 @@ jobs:
           - name: humanoid-robot-dashboard
             dockerfile: deploy/docker/dashboard.Dockerfile
             platforms: "linux/amd64,linux/arm64"
-          - name: humanoid-robot-base-jetson
-            dockerfile: deploy/docker/base-jetson.Dockerfile
-            # L4T-PyTorch is arm64-only; skip amd64 for the Jetson image.
-            platforms: "linux/arm64"
     steps:
       - uses: actions/checkout@v4
 
@@ -169,7 +165,6 @@ jobs:
         image:
           - name: humanoid-robot-base
           - name: humanoid-robot-dashboard
-          - name: humanoid-robot-base-jetson
     steps:
       - uses: actions/checkout@v4
 
@@ -243,7 +238,6 @@ jobs:
         image:
           - name: humanoid-robot-base
           - name: humanoid-robot-dashboard
-          - name: humanoid-robot-base-jetson
     steps:
       - name: Normalise owner
         run: |
@@ -293,7 +287,6 @@ jobs:
         image:
           - name: humanoid-robot-base
           - name: humanoid-robot-dashboard
-          - name: humanoid-robot-base-jetson
     steps:
       - name: Normalise owner
         run: |
