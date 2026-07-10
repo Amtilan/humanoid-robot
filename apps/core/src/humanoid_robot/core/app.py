@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from humanoid_robot.core.api import router as api_router
-from humanoid_robot.core.api.auth import BearerAuthMiddleware
+from humanoid_robot.core.api.auth import BearerAuthMiddleware, UnauthAttemptLimiter
 from humanoid_robot.core.container import AppContainer
 from humanoid_robot.core.settings import CoreSettings
 from humanoid_robot.observability import (
@@ -54,8 +54,20 @@ def create_app(settings: CoreSettings) -> FastAPI:
         openapi_tags=[{"name": "system", "description": "Health and metadata."}],
     )
     if settings.auth.token:
-        app.add_middleware(BearerAuthMiddleware, token=settings.auth.token)
-        log.info("cortex-core.auth_enabled")
+        limiter = UnauthAttemptLimiter(
+            max_attempts=settings.auth.rate_limit_max_attempts,
+            window_s=settings.auth.rate_limit_window_s,
+        )
+        app.add_middleware(
+            BearerAuthMiddleware,
+            token=settings.auth.token,
+            rate_limiter=limiter,
+        )
+        log.info(
+            "cortex-core.auth_enabled",
+            rate_limit_max=settings.auth.rate_limit_max_attempts,
+            rate_limit_window_s=settings.auth.rate_limit_window_s,
+        )
     app.include_router(api_router, prefix="/api/v1")
     _mount_metrics(app)
     return app

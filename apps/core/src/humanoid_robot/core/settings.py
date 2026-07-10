@@ -48,9 +48,19 @@ class AuthSettings(BaseModel):
     switches every non-health `/api/v1/*` route to requiring
     ``Authorization: Bearer <token>``, and the WS event stream to
     accepting either that header or a ``?token=`` query arg.
+
+    ``rate_limit_max_attempts`` and ``rate_limit_window_s`` cap the
+    number of failed-auth requests a single client (identified by
+    remote host or first X-Forwarded-For hop) can make in the window;
+    once exceeded the client gets 429 with ``Retry-After`` until the
+    oldest failure ages out.  A successful auth clears that client's
+    counter, so operators who typo their token a couple of times
+    aren't locked out for the full window.
     """
 
     token: str = ""
+    rate_limit_max_attempts: int = 10
+    rate_limit_window_s: float = 60.0
 
 
 class ActorBudget(BaseModel):
