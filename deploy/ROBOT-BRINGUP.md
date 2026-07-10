@@ -140,7 +140,7 @@ mock: `cd /opt/humanoid-robot && sudo docker compose -f docker-compose.yaml
 ### Static LAN endpoint (done 2026-07-10)
 
 `deploy/scripts/expose.sh` rebinds core + dashboard off loopback
-(`HR_BIND_ADDR=0.0.0.0`) and recreates just those two. The dashboard
+(`HR_BIND_ADDR=0.0.0.0`) and recreates just those two. <!-- pragma: allowlist secret -->The dashboard
 nginx proxies `/api` + the WS event stream to core, so **one URL is the
 whole surface**: `http://<robot-ip>:8081` (UI + REST + live events),
 `:8080` for the API directly. Auth is opt-in (`--auth` sets a bearer

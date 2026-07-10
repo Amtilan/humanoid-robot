@@ -22,6 +22,7 @@ from humanoid_robot.adapters.unitree_g1.hand import UnitreeG1Hand
 from humanoid_robot.adapters.unitree_g1.head import UnitreeG1Head
 from humanoid_robot.adapters.unitree_g1.imu import UnitreeG1Imu
 from humanoid_robot.adapters.unitree_g1.locomotion import UnitreeG1LocomotionAdapter
+from humanoid_robot.adapters.unitree_g1.lowstate import G1LowStateReader
 from humanoid_robot.adapters.unitree_g1.manifest import build_manifest
 from humanoid_robot.adapters.unitree_g1.sdk import require_sdk
 from humanoid_robot.adapters.unitree_g1.temperature import UnitreeG1Temperature
@@ -57,6 +58,7 @@ class UnitreeG1Adapter:
     _temperature: UnitreeG1Temperature | None = None
     _audio_in: UnitreeG1AudioIn | None = None
     _audio_out: UnitreeG1AudioOut | None = None
+    _lowstate: G1LowStateReader | None = None
 
     def __init__(self, **kwargs: object) -> None:
         # Adapter registry passes kwargs; validate through the settings model.
@@ -73,6 +75,7 @@ class UnitreeG1Adapter:
         self._temperature = None
         self._head = None
         self._hand = None
+        self._lowstate = None
 
     @classmethod
     def from_settings(cls, settings: UnitreeG1Settings) -> Self:
@@ -90,6 +93,7 @@ class UnitreeG1Adapter:
         obj._temperature = None
         obj._head = None
         obj._hand = None
+        obj._lowstate = None
         return obj
 
     # ---- RobotAdapterPort ---------------------------------------------------
@@ -117,6 +121,7 @@ class UnitreeG1Adapter:
             # DDS channel init is a process-global side effect; scoped to
             # this adapter's start() so tests never trigger it.
             handles.channel.ChannelFactoryInitialize(0, self.settings.network_interface)
+            self._wire_lowstate()
             self._started = True
             _LOG.info("unitree_g1.started")
 
@@ -129,6 +134,26 @@ class UnitreeG1Adapter:
             # teardown finalise DDS.
             self._started = False
             _LOG.info("unitree_g1.stopped")
+
+    def _wire_lowstate(self) -> None:
+        """Subscribe to rt/lowstate and feed the IMU + temperature ports.
+
+        Best-effort: a subscription failure logs and degrades to empty
+        telemetry rather than aborting the whole adapter (the robot is
+        still usable for commands without live sensor readback).
+        """
+        try:
+            reader = G1LowStateReader()
+            reader.start()
+        except Exception:
+            _LOG.exception("unitree_g1.lowstate_subscribe_failed")
+            return
+        self._lowstate = reader
+        # The port properties create the cached instances; wiring their
+        # `source` makes `read()` return the latest decoded DDS frame.
+        self.imu.source = reader.imu_sample
+        self.temperature.source = reader.temperature_sample
+        _LOG.info("unitree_g1.lowstate_subscribed")
 
     # ---- Sub-ports -----------------------------------------------------------
     #
