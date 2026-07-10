@@ -137,6 +137,26 @@ The real adapter is left **running** (read-only, gate closed). Revert to
 mock: `cd /opt/humanoid-robot && sudo docker compose -f docker-compose.yaml
 -f docker-compose.jetson.yaml up -d robot-adapter`.
 
+### Static LAN endpoint (done 2026-07-10)
+
+`deploy/scripts/expose.sh` rebinds core + dashboard off loopback
+(`HR_BIND_ADDR=0.0.0.0`) and recreates just those two. The dashboard
+nginx proxies `/api` + the WS event stream to core, so **one URL is the
+whole surface**: `http://<robot-ip>:8081` (UI + REST + live events),
+`:8080` for the API directly. Auth is opt-in (`--auth` sets a bearer
+token; default is open on the trusted LAN — the safety gate stays
+fail-closed either way). `--off` reverts to loopback.
+
+**Durability gotcha (fixed):** the real adapter runs host-net and reaches
+NATS on `127.0.0.1:4222`, a port that ONLY the `docker-compose.unitree.yaml`
+overlay publishes. So the overlay must be in `COMPOSE_FILE` — otherwise
+any `docker compose up` that recreates nats (e.g. `expose.sh`) drops that
+port and the adapter falls off the bus. The robot's `.env` now has
+`COMPOSE_FILE=docker-compose.yaml:docker-compose.jetson.yaml:docker-compose.unitree.yaml`,
+so the real adapter + exposed dashboard come up together and survive
+reboot. `192.168.0.61` is DHCP — reserve it or use Tailscale for a truly
+stable link.
+
 ### Phase B — real Unitree adapter (the motion blocker)
 1. Package `unitree_sdk2py` + `cyclonedds` into an **arm64 adapter image
    variant** (they're the missing runtime deps). Pin against the C++ SDK
