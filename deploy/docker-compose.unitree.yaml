@@ -1,0 +1,46 @@
+# Real Unitree G1 adapter overlay.
+#
+# Swaps the mock robot-adapter for the vendor-SDK image and gives it host
+# networking so DDS multicast reaches the G1 control boards on eth10.
+#
+# Compose it AFTER the base pull file:
+#   docker compose \
+#     -f docker-compose.yaml \
+#     -f docker-compose.unitree.yaml \
+#     up -d robot-adapter
+#
+# SAFETY: the platform's safety gate is fail-closed (e-stop engaged until
+# explicitly released), so bringing this up does NOT move the robot. It
+# establishes the DDS link and streams real telemetry. Only a released
+# gate + a whitelisted capability actuates anything.
+
+services:
+  # DDS uses L2 multicast on eth10, so the adapter runs with host
+  # networking — it lives outside the compose bridge. That means it can
+  # no longer resolve `nats` by service name, so publish NATS on the
+  # loopback and point the adapter at it.
+  nats:
+    ports:
+      - "127.0.0.1:4222:4222"
+
+  robot-adapter:
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_OWNER:-amtilan}/humanoid-robot-adapter-unitree:${IMAGE_TAG:-main}
+    network_mode: host
+    command:
+      - cortex-robot-adapter
+      - run
+      - unitree_g1_edu
+      - --interface
+      - ${HR_UNITREE_IFACE:-eth10}
+      - --mic-source
+      - ${HR_UNITREE_MIC:-g1}
+    environment:
+      # Host-net: reach NATS on the published loopback port, not by DNS.
+      HR_ROBOT_ADAPTER__NATS__SERVERS: '["nats://127.0.0.1:4222"]'
+    # The default-network depends_on from the base file is dropped under
+    # host networking; keep the ordering intent without the network dep.
+    depends_on:
+      nats:
+        condition: service_healthy
+      core:
+        condition: service_healthy
