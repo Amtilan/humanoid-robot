@@ -57,6 +57,11 @@ main() {
     fetch deploy/nats.conf                "${INSTALL_DIR}/nats.conf"
     fetch deploy/scripts/fetch-models.sh  "${INSTALL_DIR}/fetch-models.sh"
     chmod +x "${INSTALL_DIR}/fetch-models.sh"
+    fetch deploy/scripts/backup.sh        "${INSTALL_DIR}/backup.sh"
+    chmod +x "${INSTALL_DIR}/backup.sh"
+    fetch deploy/scripts/restore.sh       "${INSTALL_DIR}/restore.sh"
+    chmod +x "${INSTALL_DIR}/restore.sh"
+    install -d -m 0750 /var/backups/humanoid-robot
     for cfg in voice rag; do
         local dst="${CONFIG_DIR}/${cfg}.yaml"
         if [[ -e "${dst}" ]]; then
@@ -133,6 +138,13 @@ Enable voice + RAG (~9.5 GB of models pulled from Hugging Face):
 
 Enable observability (Prometheus + Grafana on 127.0.0.1:{9090,3000}):
   docker compose --profile metrics up -d
+
+Nightly backup (audit DB + Qdrant knowledge collection):
+  sudo cp deploy/systemd/humanoid-robot-backup.{service,timer} /etc/systemd/system/
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now humanoid-robot-backup.timer
+  # Manual one-shot: sudo ${INSTALL_DIR}/backup.sh
+  # Restore:         sudo ${INSTALL_DIR}/restore.sh /var/backups/humanoid-robot/<tarball>
 EOF
 }
 

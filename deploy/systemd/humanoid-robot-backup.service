@@ -1,0 +1,30 @@
+# /etc/systemd/system/humanoid-robot-backup.service
+#
+# Runs the backup script once. Paired with humanoid-robot-backup.timer
+# for a daily cron-style schedule.  Manual one-shot:
+#   sudo systemctl start humanoid-robot-backup.service
+
+[Unit]
+Description=humanoid-robot state backup
+Documentation=file:///opt/humanoid-robot/deploy/scripts/backup.sh
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=BACKUP_DIR=/var/backups/humanoid-robot
+Environment=BACKUP_RETAIN=14
+Environment=STATE_DIR=/var/lib/humanoid-robot
+Environment=QDRANT_URL=http://127.0.0.1:6333
+Environment=QDRANT_COLLECTION=knowledge
+EnvironmentFile=-/etc/humanoid-robot/backup.env
+
+ExecStart=/opt/humanoid-robot/backup.sh
+
+# Sandbox — the script needs write access to BACKUP_DIR and read
+# access to STATE_DIR, plus network access to Qdrant.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/backups/humanoid-robot /var/lib/humanoid-robot

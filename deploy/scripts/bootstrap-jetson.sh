@@ -68,6 +68,9 @@ install_env_examples() {
 
 install_units() {
     install -m 0644 deploy/systemd/*.service deploy/systemd/*.target /etc/systemd/system/
+    if compgen -G "deploy/systemd/*.timer" > /dev/null; then
+        install -m 0644 deploy/systemd/*.timer /etc/systemd/system/
+    fi
     systemctl daemon-reload
 }
 

@@ -67,6 +67,36 @@ Both services mount `/etc/humanoid-robot/{voice,rag}.yaml` from the
 host so you can iterate on the stack config without rebuilding the
 image.
 
+### Backup + restore
+
+Nightly snapshot the durable state (audit SQLite + Qdrant knowledge
+collection) into `/var/backups/humanoid-robot/` — safe on a live stack:
+
+```bash
+# manual one-shot
+sudo /opt/humanoid-robot/backup.sh
+# only the audit DB (skips Qdrant round-trip)
+sudo /opt/humanoid-robot/backup.sh --core-only
+
+# nightly at 02:15 UTC, persistent across reboots
+sudo systemctl enable --now humanoid-robot-backup.timer
+
+# restore
+sudo /opt/humanoid-robot/restore.sh \
+    /var/backups/humanoid-robot/humanoid-robot-20261010T021500Z.tar.gz
+```
+
+The tarball layout:
+
+```
+humanoid-robot-<UTC-ISO8601>.tar.gz
+├── safety_audit.sqlite        # SQLite .backup — safe with cortex-core live
+└── <collection>-<n>.snapshot  # Qdrant snapshot, one per rag collection
+```
+
+Retention keeps the newest `BACKUP_RETAIN` (default 14) tarballs and
+prunes older ones. Set `BACKUP_RETAIN=0` to disable pruning.
+
 ### Metrics + Grafana (opt-in)
 
 ```bash

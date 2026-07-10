@@ -1,0 +1,20 @@
+# /etc/systemd/system/humanoid-robot-backup.timer
+#
+# Nightly backup at 02:15 UTC.  Uses `Persistent=true` so a robot that
+# was off at the scheduled time still catches up on next boot.
+#
+# Enable:
+#   sudo systemctl enable --now humanoid-robot-backup.timer
+
+[Unit]
+Description=humanoid-robot nightly state backup
+Requires=humanoid-robot-backup.service
+
+[Timer]
+OnCalendar=*-*-* 02:15:00 UTC
+RandomizedDelaySec=30m
+Persistent=true
+Unit=humanoid-robot-backup.service
+
+[Install]
+WantedBy=timers.target
