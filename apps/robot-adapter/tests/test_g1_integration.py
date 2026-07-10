@@ -15,6 +15,7 @@ from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.robot_adapter_app.dispatcher import CommandDispatcher
 from humanoid_robot.robot_adapter_app.runner import (
     _resolve_arm,
+    _resolve_hand,
     _resolve_head,
     _resolve_locomotion,
 )
@@ -197,6 +198,63 @@ async def test_dispatcher_drives_g1_head_pose_end_to_end() -> None:
     result = next(ev for ev in bus.published if isinstance(ev, RobotCommandResulted))
     assert result.result.outcome == MoveOutcome.ACCEPTED
     assert fake_head.pose_calls == [(0.2, -0.4)]
+
+    await dispatcher.stop()
+
+
+@dataclass(slots=True)
+class _FakeHandClient:
+    opens: int = 0
+    closes: int = 0
+    positions: list[list[float]] = field(default_factory=list)
+
+    def Init(self) -> None:  # noqa: N802
+        return None
+
+    def SetTimeout(self, _s: float) -> None:  # noqa: N802
+        return None
+
+    def Open(self) -> int:  # noqa: N802
+        self.opens += 1
+        return 0
+
+    def Close(self) -> int:  # noqa: N802
+        self.closes += 1
+        return 0
+
+    def SetPositions(self, positions: list[float]) -> int:  # noqa: N802
+        self.positions.append(list(positions))
+        return 0
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_drives_g1_hand_open_close_and_positions() -> None:
+    bus = InMemoryEventBus()
+    adapter = UnitreeG1Adapter()
+    fake_hand = _FakeHandClient()
+    adapter.attach_hand_client(fake_hand, hand_kind="dex3")
+
+    dispatcher = CommandDispatcher(bus=bus)
+    hand = _resolve_hand(adapter)
+    assert hand is not None
+    dispatcher.register_hand(hand)
+    await dispatcher.start()
+
+    await bus.publish(_forward("hands.open", {}))
+    await _wait_for(lambda: any(isinstance(ev, RobotCommandResulted) for ev in bus.published))
+    assert fake_hand.opens == 1
+
+    await bus.publish(_forward("hands.set_positions", {"positions": [0.2, 0.5, 0.8]}))
+    await _wait_for(
+        lambda: sum(1 for ev in bus.published if isinstance(ev, RobotCommandResulted)) >= 2
+    )
+    assert fake_hand.positions == [[0.2, 0.5, 0.8]]
+
+    await bus.publish(_forward("hands.close", {}))
+    await _wait_for(
+        lambda: sum(1 for ev in bus.published if isinstance(ev, RobotCommandResulted)) >= 3
+    )
+    assert fake_hand.closes == 1
 
     await dispatcher.stop()
 

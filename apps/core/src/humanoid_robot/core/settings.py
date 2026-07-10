@@ -58,8 +58,14 @@ class SafetySettings(BaseModel):
 
     allowed_capabilities: tuple[str, ...] = (
         "arms.gesture",
+        "arms.release",
+        "hands.close",
+        "hands.open",
+        "hands.set_positions",
         "head.pose",
+        "head.reset",
         "locomotion.move",
+        "locomotion.stop",
         "voice.speak",
     )
     rate_limit_window_s: float = 5.0

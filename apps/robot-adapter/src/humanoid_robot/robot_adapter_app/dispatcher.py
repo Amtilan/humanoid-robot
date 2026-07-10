@@ -35,6 +35,7 @@ from humanoid_robot.observability import get_logger
 from humanoid_robot.ports import (
     ArmPort,
     EventBusPort,
+    HandPort,
     HeadPort,
     LocomotionPort,
     Subscription,
@@ -94,6 +95,35 @@ class CommandDispatcher:
 
         self.register("head.pose", _pose)
         self.register("head.reset", _reset)
+
+    def register_hand(self, hand: HandPort) -> None:
+        async def _open(_payload: dict[str, object]) -> RobotCommandResult:
+            return await hand.open()
+
+        async def _close(_payload: dict[str, object]) -> RobotCommandResult:
+            return await hand.close()
+
+        async def _positions(payload: dict[str, object]) -> RobotCommandResult:
+            raw = payload.get("positions")
+            if not isinstance(raw, (list, tuple)) or not raw:
+                return RobotCommandResult(
+                    outcome=MoveOutcome.REJECTED_BY_POLICY,
+                    error_code="missing_positions",
+                    error_message="payload must include 'positions': non-empty list of floats",
+                )
+            try:
+                positions = tuple(float(v) for v in raw)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                return RobotCommandResult(
+                    outcome=MoveOutcome.REJECTED_BY_POLICY,
+                    error_code="invalid_positions",
+                    error_message="all entries of 'positions' must be numeric",
+                )
+            return await hand.set_positions(positions)
+
+        self.register("hands.open", _open)
+        self.register("hands.close", _close)
+        self.register("hands.set_positions", _positions)
 
     async def start(self) -> None:
         if self._subscription is not None:

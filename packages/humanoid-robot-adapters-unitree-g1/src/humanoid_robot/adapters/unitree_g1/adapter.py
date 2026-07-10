@@ -18,6 +18,7 @@ from humanoid_robot.adapters.unitree_g1.arm import UnitreeG1Arm
 from humanoid_robot.adapters.unitree_g1.audio_in import G1AudioInConfig, UnitreeG1AudioIn
 from humanoid_robot.adapters.unitree_g1.audio_out import UnitreeG1AudioOut
 from humanoid_robot.adapters.unitree_g1.battery import UnitreeG1Battery
+from humanoid_robot.adapters.unitree_g1.hand import UnitreeG1Hand
 from humanoid_robot.adapters.unitree_g1.head import UnitreeG1Head
 from humanoid_robot.adapters.unitree_g1.imu import UnitreeG1Imu
 from humanoid_robot.adapters.unitree_g1.locomotion import UnitreeG1LocomotionAdapter
@@ -50,6 +51,7 @@ class UnitreeG1Adapter:
     _locomotion: UnitreeG1LocomotionAdapter | None = None
     _arm: UnitreeG1Arm | None = None
     _head: UnitreeG1Head | None = None
+    _hand: UnitreeG1Hand | None = None
     _battery: UnitreeG1Battery | None = None
     _imu: UnitreeG1Imu | None = None
     _temperature: UnitreeG1Temperature | None = None
@@ -70,6 +72,7 @@ class UnitreeG1Adapter:
         self._audio_out = None
         self._temperature = None
         self._head = None
+        self._hand = None
 
     @classmethod
     def from_settings(cls, settings: UnitreeG1Settings) -> Self:
@@ -86,6 +89,7 @@ class UnitreeG1Adapter:
         obj._audio_out = None
         obj._temperature = None
         obj._head = None
+        obj._hand = None
         return obj
 
     # ---- RobotAdapterPort ---------------------------------------------------
@@ -166,6 +170,18 @@ class UnitreeG1Adapter:
     def attach_head_client(self, client: object) -> None:
         """Test hook: inject a fake LocoClient for head control."""
         self._head = UnitreeG1Head(client=client)
+
+    @property
+    def hand(self) -> UnitreeG1Hand:
+        if self._hand is None:
+            self._hand = UnitreeG1Hand(hand_kind=self.settings.hand_kind)
+        return self._hand
+
+    def attach_hand_client(self, client: object, *, hand_kind: str = "test") -> None:
+        """Test hook: inject a fake hand client (skips vendor SDK loading)."""
+        hand = UnitreeG1Hand(hand_kind=hand_kind)
+        hand.attach_client(client)
+        self._hand = hand
 
     @property
     def battery(self) -> UnitreeG1Battery:

@@ -216,6 +216,28 @@ export function RobotPage() {
             disabled={command.isPending}
           />
           <CmdButton
+            label="✋ hand open"
+            onClick={() =>
+              command.mutate({
+                capability: "hands.open",
+                payload: {},
+                submitter,
+              })
+            }
+            disabled={command.isPending}
+          />
+          <CmdButton
+            label="✊ hand close"
+            onClick={() =>
+              command.mutate({
+                capability: "hands.close",
+                payload: {},
+                submitter,
+              })
+            }
+            disabled={command.isPending}
+          />
+          <CmdButton
             label="■ stop"
             onClick={() =>
               command.mutate({
