@@ -104,6 +104,27 @@ HR_ROBOT_ADAPTER__ADAPTER_NAME=mock
 EOF
     chmod 0640 "${INSTALL_DIR}/.env"
 
+    if command -v cosign >/dev/null 2>&1; then
+        echo
+        echo "Verifying image signatures against publish-images.yaml OIDC identity…"
+        for name in humanoid-robot-base humanoid-robot-dashboard; do
+            local ref="ghcr.io/amtilan/${name}:${IMAGE_TAG}"
+            if ! cosign verify "${ref}" \
+                --certificate-identity-regexp "^https://github.com/Amtilan/humanoid-robot/.github/workflows/publish-images.yaml@" \
+                --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+                > /dev/null 2>&1; then
+                echo "  WARNING: signature verification failed for ${ref}" >&2
+                echo "  proceed only if you trust the tag was published from this repo" >&2
+            else
+                echo "  ${ref} — verified"
+            fi
+        done
+    else
+        echo
+        echo "cosign not installed — skipping signature verification."
+        echo "Install cosign (https://docs.sigstore.dev/cosign/installation/) to enable."
+    fi
+
     echo
     echo "Pulling images (IMAGE_TAG=${IMAGE_TAG})…"
     ( cd "${INSTALL_DIR}" && docker compose pull )

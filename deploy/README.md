@@ -139,7 +139,7 @@ every `vX.Y.Z` tag):
 - `ghcr.io/amtilan/humanoid-robot-base`
 - `ghcr.io/amtilan/humanoid-robot-dashboard`
 
-Every publish runs two follow-up matrix jobs:
+Every publish runs three follow-up matrix jobs:
 
 - **Trivy** scans each image for HIGH/CRITICAL fixable CVEs, uploads
   SARIF to the GitHub Security tab (viewable under Security → Code
@@ -150,6 +150,31 @@ Every publish runs two follow-up matrix jobs:
   artefact with a 90-day retention. Reach for it when responding to a
   supply-chain question (which package version is in `sha-abc1234`?
   which base layer? etc.).
+- **Cosign** signs the image manifests keylessly against this
+  workflow's OIDC identity (no long-lived key material). A `verify`
+  job runs immediately after to confirm the signature landed. See
+  "Signature verification" below for the operator-side check.
+
+### Signature verification
+
+`install-on-robot.sh` verifies each image's signature before pulling
+if `cosign` is installed. Install cosign
+([docs.sigstore.dev](https://docs.sigstore.dev/cosign/installation/))
+before running the installer; without it the installer prints a
+"skipping verification" note and continues.
+
+Manual verification of any specific image:
+
+```bash
+cosign verify ghcr.io/amtilan/humanoid-robot-base:v1.0.0 \
+    --certificate-identity-regexp \
+        '^https://github.com/Amtilan/humanoid-robot/.github/workflows/publish-images.yaml@' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Successful output ends with a JSON block describing the certificate
+chain that vouches for the image. Any deviation (wrong repo, wrong
+workflow, wrong identity) causes cosign to exit non-zero.
 
 ### Cutting a release
 
