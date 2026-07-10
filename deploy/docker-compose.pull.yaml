@@ -48,7 +48,10 @@ services:
       # Persist the audit SQLite + any future core state across restarts.
       - core-state:/var/lib/humanoid-robot
     ports:
-      - "127.0.0.1:8080:8080"
+      # Loopback by default. Set HR_BIND_ADDR=0.0.0.0 in .env to reach
+      # the API from other devices on the LAN — do that ONLY with
+      # HR_AUTH__TOKEN set, since the API can dispatch robot commands.
+      - "${HR_BIND_ADDR:-127.0.0.1}:8080:8080"
     healthcheck:
       # Readiness gates the manifest / telemetry subscribers, so anything
       # that publishes on the bus must depend on this being healthy.
@@ -80,7 +83,10 @@ services:
     depends_on:
       - core
     ports:
-      - "127.0.0.1:8081:80"
+      # nginx here proxies /api + the WebSocket event stream to core, so
+      # this one port is the single entrypoint to everything. Loopback by
+      # default; HR_BIND_ADDR=0.0.0.0 exposes it on the LAN.
+      - "${HR_BIND_ADDR:-127.0.0.1}:8081:80"
 
   # ---------------------------------------------------------------------------
   # Opt-in services. Model weights live under /var/lib/humanoid-robot/models
