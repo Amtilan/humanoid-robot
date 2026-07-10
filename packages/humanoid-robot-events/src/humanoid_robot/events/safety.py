@@ -46,3 +46,17 @@ class SafetyCommandForwarded(BaseEvent):
     command_id: str
     capability: str
     payload: dict[str, Any]
+
+
+class SafetyWatchdogHeartbeat(BaseEvent):
+    """Operator liveness ping.
+
+    The watchdog auto-engages the e-stop if no heartbeat arrives within
+    a configured window.  Any actor (operator UI, deadman GPIO, remote
+    console) may publish these.
+    """
+
+    subject: ClassVar[str] = "safety.watchdog.heartbeat"
+    schema_version: ClassVar[int] = 1
+
+    actor: str

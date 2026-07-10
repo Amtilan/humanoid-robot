@@ -30,6 +30,7 @@ from humanoid_robot.safety import (
     KnownCapabilitiesPolicy,
     RateLimitPolicy,
     SafetyGate,
+    SafetyWatchdog,
 )
 
 
@@ -51,6 +52,7 @@ class AppContainer:
     diagnostics_ticker: DiagnosticsTicker | None = field(default=None)
     safety_gate: SafetyGate | None = field(default=None)
     safety_task: asyncio.Task[None] | None = field(default=None)
+    safety_watchdog: SafetyWatchdog | None = field(default=None)
     _manifest_subscription: Subscription | None = field(default=None)
 
     @classmethod
@@ -96,6 +98,14 @@ class AppContainer:
         safety_gate = SafetyGate(policy=safety_policy, bus=bus, estop=estop)
         safety_task = asyncio.create_task(safety_gate.run(), name="safety-gate")
 
+        safety_watchdog = SafetyWatchdog(
+            gate=safety_gate,
+            bus=bus,
+            timeout_s=settings.safety.watchdog_timeout_s,
+            check_interval_s=settings.safety.watchdog_check_interval_s,
+        )
+        await safety_watchdog.start()
+
         return cls(
             settings=settings,
             event_bus=bus,
@@ -107,6 +117,7 @@ class AppContainer:
             diagnostics_ticker=diagnostics_ticker,
             safety_gate=safety_gate,
             safety_task=safety_task,
+            safety_watchdog=safety_watchdog,
             _manifest_subscription=manifest_subscription,
         )
 
@@ -116,6 +127,9 @@ class AppContainer:
         if self.diagnostics_ticker is not None:
             await self.diagnostics_ticker.stop()
             self.diagnostics_ticker = None
+        if self.safety_watchdog is not None:
+            await self.safety_watchdog.stop()
+            self.safety_watchdog = None
         if self.safety_gate is not None:
             self.safety_gate.request_stop()
         if self.safety_task is not None:

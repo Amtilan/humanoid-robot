@@ -12,6 +12,7 @@ from humanoid_robot.events.safety import (
     SafetyCommandForwarded,
     SafetyEStopEngaged,
     SafetyEStopReleased,
+    SafetyWatchdogHeartbeat,
 )
 from humanoid_robot.events.system import (
     OtaAvailable,
@@ -52,6 +53,7 @@ __all__ = [
     "SafetyCommandForwarded",
     "SafetyEStopEngaged",
     "SafetyEStopReleased",
+    "SafetyWatchdogHeartbeat",
     "SecurityAudit",
     "SpeechDetected",
     "SystemDiagnosticsTick",

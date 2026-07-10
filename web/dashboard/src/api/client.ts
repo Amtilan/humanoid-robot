@@ -220,6 +220,11 @@ export const api = {
       "/api/v1/safety/estop/release",
       body,
     ),
+  safetyHeartbeat: (body: { actor: string }) =>
+    postJson<{ accepted: boolean }, typeof body>(
+      "/api/v1/safety/watchdog/heartbeat",
+      body,
+    ),
 };
 
 export interface SafetyStatus {
@@ -227,4 +232,7 @@ export interface SafetyStatus {
   allowed_capabilities: string[];
   rate_limit_window_s: number;
   rate_limit_max_events: number;
+  watchdog_timeout_s: number;
+  watchdog_live: boolean;
+  watchdog_seconds_since_heartbeat: number | null;
 }

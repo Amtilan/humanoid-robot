@@ -9,7 +9,8 @@ const isSafetySubject = (subject: string) =>
   subject === "safety.estop.engaged" ||
   subject === "safety.estop.released" ||
   subject === "safety.command.denied" ||
-  subject === "safety.command.forwarded";
+  subject === "safety.command.forwarded" ||
+  subject === "safety.watchdog.heartbeat";
 
 const MAX_TAPE = 40;
 
@@ -134,7 +135,25 @@ export function SafetyPage() {
       </div>
 
       {status.data && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <Card title="Watchdog">
+            <div className="flex items-center gap-2 text-sm">
+              <span
+                className={
+                  status.data.watchdog_live
+                    ? "inline-block h-2 w-2 rounded-full bg-emerald-500"
+                    : "inline-block h-2 w-2 animate-pulse rounded-full bg-yellow-500"
+                }
+              />
+              <span>{status.data.watchdog_live ? "live" : "stale"}</span>
+            </div>
+            <p className="pt-1 text-xs text-muted-foreground">
+              timeout {status.data.watchdog_timeout_s.toFixed(1)} s ·{" "}
+              {status.data.watchdog_seconds_since_heartbeat === null
+                ? "no heartbeat yet"
+                : `${status.data.watchdog_seconds_since_heartbeat.toFixed(1)} s ago`}
+            </p>
+          </Card>
           <Card title="Allowed capabilities">
             {status.data.allowed_capabilities.length === 0 ? (
               <p className="text-xs text-muted-foreground">None (fail-closed).</p>
@@ -150,7 +169,7 @@ export function SafetyPage() {
           </Card>
           <Card title="Rate limit">
             <div className="text-sm">
-              {status.data.rate_limit_max_events} events / {" "}
+              {status.data.rate_limit_max_events} events /{" "}
               {status.data.rate_limit_window_s.toFixed(1)} s
             </div>
           </Card>

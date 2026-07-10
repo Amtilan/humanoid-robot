@@ -7,6 +7,7 @@ import { App } from "./App";
 import { BusToastBridge } from "./lib/busToasts";
 import { EventStreamProvider } from "./lib/eventStream";
 import { ToastProvider } from "./lib/toast";
+import { WatchdogHeartbeat } from "./lib/watchdog";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -24,6 +25,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <EventStreamProvider>
         <ToastProvider>
           <BusToastBridge />
+          <WatchdogHeartbeat actor="dashboard" />
           <BrowserRouter>
             <App />
           </BrowserRouter>

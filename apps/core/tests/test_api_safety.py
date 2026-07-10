@@ -23,6 +23,7 @@ from humanoid_robot.safety import (
     EStopState,
     KnownCapabilitiesPolicy,
     SafetyGate,
+    SafetyWatchdog,
 )
 from humanoid_robot.testing import InMemoryEventBus
 
@@ -43,6 +44,12 @@ def app() -> FastAPI:
         bus=bus,
         estop=estop,
     )
+    watchdog = SafetyWatchdog(
+        gate=gate,
+        bus=bus,
+        timeout_s=settings.safety.watchdog_timeout_s,
+        check_interval_s=settings.safety.watchdog_check_interval_s,
+    )
     container = AppContainer(
         settings=settings,
         event_bus=bus,
@@ -51,6 +58,7 @@ def app() -> FastAPI:
         plugin_manager=PluginManager(registry=PluginRegistry.from_entries([]), bus=bus),
         robot_manifest_cache=RobotManifestCache(),
         safety_gate=gate,
+        safety_watchdog=watchdog,
     )
 
     @asynccontextmanager
@@ -103,3 +111,17 @@ class TestSafetyApi:
         with TestClient(app) as client:
             resp = client.post("/api/v1/safety/estop/engage", json={"actor": ""})
         assert resp.status_code == 422
+
+    def test_heartbeat_publishes_event(self, app: FastAPI) -> None:
+        with TestClient(app) as client:
+            resp = client.post("/api/v1/safety/watchdog/heartbeat", json={"actor": "op"})
+        assert resp.status_code == 200
+        assert resp.json()["accepted"] is True
+
+    def test_status_reports_watchdog_fields(self, app: FastAPI) -> None:
+        with TestClient(app) as client:
+            resp = client.get("/api/v1/safety/status")
+        body = resp.json()
+        assert "watchdog_timeout_s" in body
+        assert body["watchdog_live"] is False
+        assert body["watchdog_seconds_since_heartbeat"] is None

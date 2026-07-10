@@ -8,6 +8,7 @@ from humanoid_robot.safety.policies import (
     KnownCapabilitiesPolicy,
     RateLimitPolicy,
 )
+from humanoid_robot.safety.watchdog import SafetyWatchdog
 
 __all__ = [
     "ChainPolicy",
@@ -16,4 +17,5 @@ __all__ = [
     "KnownCapabilitiesPolicy",
     "RateLimitPolicy",
     "SafetyGate",
+    "SafetyWatchdog",
 ]
