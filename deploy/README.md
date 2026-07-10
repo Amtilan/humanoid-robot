@@ -104,10 +104,43 @@ docker compose -C /opt/humanoid-robot up -d
 
 Images (both `linux/amd64` + `linux/arm64`, published by
 `.github/workflows/publish-images.yaml` on every push to main and on
-tag pushes):
+every `vX.Y.Z` tag):
 
 - `ghcr.io/amtilan/humanoid-robot-base`
 - `ghcr.io/amtilan/humanoid-robot-dashboard`
+
+### Cutting a release
+
+Tag-based releases are driven by `.github/workflows/release.yaml`
+(manual trigger only — no accidental releases on merge).
+
+```bash
+# Local dry-run preview of the changelog
+bash deploy/scripts/preview-release.sh v1.0.0
+
+# Trigger the workflow from the Actions tab or via gh CLI:
+gh workflow run release --field version=v1.0.0 --field pre_release=false
+# Optional dry-run first:
+gh workflow run release --field version=v1.0.0 --field dry_run=true
+```
+
+The workflow:
+
+1. Validates the version is strict semver (`vMAJOR.MINOR.PATCH[-pre]`).
+2. Rejects existing tags — releases are immutable.
+3. Generates a changelog from `git log <prev-tag>..HEAD`, filters out
+   `Merge`/`Bump` noise.
+4. Creates an annotated tag + GitHub Release with that body.
+5. The tag push triggers `publish-images.yaml`, which builds the
+   multi-arch OCI images and publishes them under the same version.
+
+Robot upgrade after a release:
+
+```bash
+sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=v1.0.0/' /opt/humanoid-robot/.env
+docker compose -C /opt/humanoid-robot pull
+docker compose -C /opt/humanoid-robot up -d
+```
 
 ## Local compose stack
 

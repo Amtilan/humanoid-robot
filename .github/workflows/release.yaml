@@ -1,0 +1,162 @@
+name: release
+
+# Cut a new release: create the git tag, generate a changelog from the
+# commits since the last tag, publish a GitHub Release with that body,
+# and let publish-images.yaml pick the tag up to push signed OCI images
+# to GHCR.
+#
+# Manual trigger only — releases are a conscious decision, not a
+# side-effect of merging to main.
+#
+# Usage
+#   * Actions → release → "Run workflow" → version=v1.0.0 [pre-release?]
+#   * or: gh workflow run release --field version=v1.0.0
+#
+# Version must be strict semver with a leading v (v1.0.0, v1.2.3-rc.1).
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semver tag to cut (e.g. v1.0.0 or v1.0.0-rc.1)"
+        required: true
+        type: string
+      pre_release:
+        description: "Mark the GitHub Release as pre-release"
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: "Print the changelog + tag plan but don't push anything"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  cut:
+    name: cut release ${{ inputs.version }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Validate version format
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "invalid semver: '$VERSION' (expected vMAJOR.MINOR.PATCH[-prerelease])" >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Verify tag does not already exist
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/${VERSION}" > /dev/null; then
+            echo "tag ${VERSION} already exists" >&2
+            git show-ref "${VERSION}" >&2
+            exit 1
+          fi
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Generate changelog since previous tag
+        id: changelog
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          prev=$(git tag --sort=-v:refname | grep -E '^v[0-9]' | head -n1 || true)
+          {
+            echo "# ${VERSION}"
+            echo
+            echo "_$(date -u +%Y-%m-%dT%H:%M:%SZ)_"
+            echo
+            if [[ -n "$prev" ]]; then
+              echo "## Changes since \`${prev}\`"
+              echo
+              range="${prev}..HEAD"
+            else
+              echo "## Initial release"
+              echo
+              range=""
+            fi
+            echo
+            # feat: / fix: / chore: … grouped, oldest first for narrative
+            git log --reverse --pretty=format:"* %s (%h)" ${range} \
+                | grep -Ev '^\* (Merge |Bump )' \
+                || echo "* (no commits)"
+          } > CHANGELOG_ENTRY.md
+          echo "prev=${prev}" >> "$GITHUB_OUTPUT"
+          echo "--- CHANGELOG_ENTRY.md ---"
+          cat CHANGELOG_ENTRY.md
+
+      - name: Dry-run summary
+        if: inputs.dry_run
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          {
+            echo "## Dry-run release plan"
+            echo
+            echo "- Would tag: \`${VERSION}\`"
+            echo "- Previous tag: \`${{ steps.changelog.outputs.prev }}\`"
+            echo "- Would create GitHub Release marked pre-release=${{ inputs.pre_release }}"
+            echo
+            echo "### Changelog"
+            echo
+            echo "\`\`\`"
+            cat CHANGELOG_ENTRY.md
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create annotated tag
+        if: ${{ !inputs.dry_run }}
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git tag -a "${VERSION}" -F CHANGELOG_ENTRY.md
+          git push origin "${VERSION}"
+
+      - name: Publish GitHub Release
+        if: ${{ !inputs.dry_run }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: ${{ inputs.version }}
+          body_path: CHANGELOG_ENTRY.md
+          prerelease: ${{ inputs.pre_release }}
+          generate_release_notes: false
+
+      - name: Summarise
+        if: ${{ !inputs.dry_run }}
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          {
+            echo "## Released \`${VERSION}\`"
+            echo
+            echo "- Tag pushed to \`origin\`"
+            echo "- GitHub Release published"
+            echo "- \`publish-images.yaml\` will now build multi-arch OCI images and push to GHCR under \`${VERSION}\`"
+            echo
+            echo "Robot upgrade:"
+            echo "\`\`\`bash"
+            echo "sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=${VERSION}/' /opt/humanoid-robot/.env"
+            echo "docker compose -C /opt/humanoid-robot pull"
+            echo "docker compose -C /opt/humanoid-robot up -d"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
