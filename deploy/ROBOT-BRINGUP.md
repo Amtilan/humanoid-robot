@@ -107,6 +107,36 @@ on JetPack, cosign missing, egress shadowed by the eth10 DDS route
 fans queries across both links) — now forces the route via a proven
 online interface.
 
+### Phase B1/B2 executed (2026-07-10) — real adapter live, read-only
+
+- **B1**: `humanoid-robot-adapter-unitree` image built in CI (QEMU arm64):
+  base + CycloneDDS 0.10.2 + `cyclonedds` + `unitree_sdk2_python`, keyless
+  cosign-signed, `.sig` flipped public. (Trivy/Syft steps fail on the
+  amd64 runner because the image is arm64-only — cosmetic, fix by pinning
+  `platform: linux/arm64` on those steps.)
+- **B2**: pulled + verified (fail-closed cosign) on the robot, swapped
+  mock → `unitree_g1_edu` via `docker-compose.unitree.yaml` (host-net,
+  `--interface eth10`). Adapter came up clean:
+  `unitree_g1.started` (ChannelFactoryInitialize on eth10, 382 ms, no
+  error) → `command_dispatcher.ready` → `telemetry_pump.ready sources=3`.
+  Manifest now reports the real G1: bipedal locomotion, two 7-DOF arms
+  with the vendor gesture list, hands=none. **Safety gate stayed
+  fail-closed** (`estop_engaged=true`, `pending_command_count=0`) — zero
+  motion.
+- **Finding (B2.5, next):** the telemetry *pipeline* is proven end-to-end
+  (adapter → NATS → core cache → `/api/v1/robot/telemetry`, fresh
+  timestamps) but the **values are empty** (battery 0.0, imu/temperature
+  `{}`). Root cause: `battery.py` / `imu.py` / `temperature.py` expose the
+  port + a `set_*` hook but nothing wires a DDS `rt/lowstate`
+  (`LowState_`) subscriber to push real values on each tick. `start()`
+  only does `ChannelFactoryInitialize`. **Next real task:** implement the
+  lowstate subscriber (bms_state → battery, imu_state → imu, motor temps
+  → temperature) and feed the existing ports.
+
+The real adapter is left **running** (read-only, gate closed). Revert to
+mock: `cd /opt/humanoid-robot && sudo docker compose -f docker-compose.yaml
+-f docker-compose.jetson.yaml up -d robot-adapter`.
+
 ### Phase B — real Unitree adapter (the motion blocker)
 1. Package `unitree_sdk2py` + `cyclonedds` into an **arm64 adapter image
    variant** (they're the missing runtime deps). Pin against the C++ SDK
