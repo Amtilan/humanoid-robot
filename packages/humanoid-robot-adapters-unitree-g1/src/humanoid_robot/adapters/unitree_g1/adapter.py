@@ -15,6 +15,8 @@ from typing import Self
 from pydantic import BaseModel, Field
 
 from humanoid_robot.adapters.unitree_g1.arm import UnitreeG1Arm
+from humanoid_robot.adapters.unitree_g1.audio_in import G1AudioInConfig, UnitreeG1AudioIn
+from humanoid_robot.adapters.unitree_g1.audio_out import UnitreeG1AudioOut
 from humanoid_robot.adapters.unitree_g1.battery import UnitreeG1Battery
 from humanoid_robot.adapters.unitree_g1.imu import UnitreeG1Imu
 from humanoid_robot.adapters.unitree_g1.locomotion import UnitreeG1LocomotionAdapter
@@ -47,6 +49,8 @@ class UnitreeG1Adapter:
     _arm: UnitreeG1Arm | None = None
     _battery: UnitreeG1Battery | None = None
     _imu: UnitreeG1Imu | None = None
+    _audio_in: UnitreeG1AudioIn | None = None
+    _audio_out: UnitreeG1AudioOut | None = None
 
     def __init__(self, **kwargs: object) -> None:
         # Adapter registry passes kwargs; validate through the settings model.
@@ -58,6 +62,8 @@ class UnitreeG1Adapter:
         self._arm = None
         self._battery = None
         self._imu = None
+        self._audio_in = None
+        self._audio_out = None
 
     @classmethod
     def from_settings(cls, settings: UnitreeG1Settings) -> Self:
@@ -69,6 +75,9 @@ class UnitreeG1Adapter:
         obj._locomotion = None
         obj._arm = None
         obj._battery = None
+        obj._imu = None
+        obj._audio_in = None
+        obj._audio_out = None
         return obj
 
     # ---- RobotAdapterPort ---------------------------------------------------
@@ -169,3 +178,31 @@ class UnitreeG1Adapter:
             msg = "imu source must be a zero-arg callable"
             raise TypeError(msg)
         self._imu = UnitreeG1Imu(source=source)  # type: ignore[arg-type]
+
+    @property
+    def audio_in(self) -> UnitreeG1AudioIn:
+        if self._audio_in is None:
+            self._audio_in = UnitreeG1AudioIn(
+                config=G1AudioInConfig(
+                    interface_ip=self.settings.network_interface
+                    if self.settings.mic_source == "g1"
+                    else None
+                ),
+            )
+        return self._audio_in
+
+    def attach_audio_in(self, audio_in: UnitreeG1AudioIn) -> None:
+        """Test hook: replace the multicast-mic port with a scripted one."""
+        self._audio_in = audio_in
+
+    @property
+    def audio_out(self) -> UnitreeG1AudioOut:
+        if self._audio_out is None:
+            self._audio_out = UnitreeG1AudioOut(volume_pct=self.settings.speaker_volume)
+        return self._audio_out
+
+    def attach_audio_out_client(self, client: object) -> None:
+        """Test hook: inject a fake AudioClient before playing."""
+        audio_out = UnitreeG1AudioOut(volume_pct=self.settings.speaker_volume)
+        audio_out.attach_client(client)
+        self._audio_out = audio_out
