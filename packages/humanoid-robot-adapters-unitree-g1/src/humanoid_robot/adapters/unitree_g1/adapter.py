@@ -14,9 +14,16 @@ from typing import Self
 
 from pydantic import BaseModel, Field
 
+from humanoid_robot.adapters.unitree_g1.locomotion import UnitreeG1LocomotionAdapter
 from humanoid_robot.adapters.unitree_g1.manifest import build_manifest
 from humanoid_robot.adapters.unitree_g1.sdk import require_sdk
-from humanoid_robot.domain.robot import RobotCapabilities, RobotManifest
+from humanoid_robot.domain.robot import (
+    MoveCommand,
+    RobotCapabilities,
+    RobotCommandResult,
+    RobotManifest,
+    StopCommand,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -39,6 +46,7 @@ class UnitreeG1Adapter:
     _manifest: RobotManifest | None = None
     _started: bool = False
     _start_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    _locomotion: UnitreeG1LocomotionAdapter | None = None
 
     def __init__(self, **kwargs: object) -> None:
         # Adapter registry passes kwargs; validate through the settings model.
@@ -46,6 +54,7 @@ class UnitreeG1Adapter:
         self._manifest = None
         self._started = False
         self._start_lock = asyncio.Lock()
+        self._locomotion = None
 
     @classmethod
     def from_settings(cls, settings: UnitreeG1Settings) -> Self:
@@ -54,6 +63,7 @@ class UnitreeG1Adapter:
         obj._manifest = None
         obj._started = False
         obj._start_lock = asyncio.Lock()
+        obj._locomotion = None
         return obj
 
     # ---- RobotAdapterPort ---------------------------------------------------
@@ -93,3 +103,24 @@ class UnitreeG1Adapter:
             # teardown finalise DDS.
             self._started = False
             _LOG.info("unitree_g1.stopped")
+
+    # ---- LocomotionPort ------------------------------------------------------
+    #
+    # Duck-typing exposure: the CommandDispatcher probes `isinstance(adapter,
+    # LocomotionPort)` at wire-up; both `move` and `stop` below satisfy it.
+
+    def _locomotion_adapter(self) -> UnitreeG1LocomotionAdapter:
+        if self._locomotion is None:
+            self._locomotion = UnitreeG1LocomotionAdapter()
+        return self._locomotion
+
+    def attach_locomotion_client(self, client: object) -> None:
+        """Test hook: inject a fake LocoClient before dispatching commands."""
+        self._locomotion = UnitreeG1LocomotionAdapter(client=client)
+
+    async def move(self, cmd: MoveCommand) -> RobotCommandResult:
+        return await self._locomotion_adapter().move(cmd)
+
+    async def stop_locomotion(self, cmd: StopCommand) -> RobotCommandResult:
+        # Named to avoid clashing with adapter lifecycle `stop()` above.
+        return await self._locomotion_adapter().stop(cmd)
