@@ -2,22 +2,21 @@
 #
 # Turn the loopback-only dashboard/API into a static LAN endpoint.
 #
-# Enables the bearer token (the API can dispatch robot commands, so it
-# must NOT be open once it leaves loopback) and rebinds core + dashboard
-# to all interfaces via HR_BIND_ADDR. Then recreates just those two
-# containers — the robot-adapter is left untouched.
-#
-# After this, everything is reachable through ONE url:
+# Rebinds core + dashboard to all interfaces via HR_BIND_ADDR and
+# recreates just those two containers — the robot-adapter is left
+# untouched. After this everything is reachable through ONE url:
 #   http://<robot-ip>:8081   (dashboard; nginx proxies /api + the WS
-#                             event stream to core, so the UI, the REST
-#                             API and live events all go through it)
-#   http://<robot-ip>:8080   (core API directly, same token)
+#                             event stream to core, so UI, REST API and
+#                             live events all go through it)
+#   http://<robot-ip>:8080   (core API directly)
 #
-#   sudo bash expose.sh                 # generate a fresh token
-#   sudo HR_AUTH__TOKEN=... bash expose.sh   # reuse a known token
+# Auth is OPT-IN. On a trusted home LAN the bearer token is usually just
+# friction — the safety gate stays fail-closed regardless. Pass --auth if
+# you do want the API gated by a token.
 #
-# Revert to loopback-only + no auth:
-#   sudo bash expose.sh --off
+#   sudo bash expose.sh            # open on the LAN, no auth
+#   sudo bash expose.sh --auth     # open on the LAN, require a bearer token
+#   sudo bash expose.sh --off      # back to loopback-only
 
 set -euo pipefail
 DIR="${INSTALL_DIR:-/opt/humanoid-robot}"
@@ -33,7 +32,9 @@ _set() {  # _set KEY VALUE  (idempotent upsert in .env)
     fi
 }
 
-if [[ "${1:-}" == "--off" ]]; then
+MODE="${1:-}"
+
+if [[ "${MODE}" == "--off" ]]; then
     _set HR_BIND_ADDR 127.0.0.1
     _set HR_AUTH__TOKEN ""
     ( cd "${DIR}" && docker compose up -d core dashboard )
@@ -41,8 +42,11 @@ if [[ "${1:-}" == "--off" ]]; then
     exit 0
 fi
 
-# 192 bits of entropy, url/-shell-safe.
-TOKEN="${HR_AUTH__TOKEN:-$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | cut -c1-32)}"
+TOKEN=""
+if [[ "${MODE}" == "--auth" ]]; then
+    # 192 bits of entropy, url/-shell-safe.
+    TOKEN="${HR_AUTH__TOKEN:-$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | cut -c1-32)}"
+fi
 
 _set HR_BIND_ADDR 0.0.0.0   # pragma: allowlist secret
 _set HR_AUTH__TOKEN "${TOKEN}"
@@ -58,12 +62,22 @@ cat <<OUT
 ======================================================================
  Dashboard : http://${IP}:8081
  API       : http://${IP}:8080
+OUT
+if [[ -n "${TOKEN}" ]]; then
+    cat <<OUT
  Token     : ${TOKEN}
-
- Open the dashboard, it will prompt for the token (stored in your
- browser). For direct API calls:
+   The dashboard will prompt for it (stored in your browser). Direct:
    curl -H "Authorization: Bearer ${TOKEN}" http://${IP}:8080/api/v1/robot/manifests
-
+OUT
+else
+    cat <<OUT
+ Auth      : OFF — anyone on this LAN can reach the robot API. The
+             safety gate stays fail-closed, but treat the network as
+             trusted. Re-run with --auth to gate it.
+   curl http://${IP}:8080/api/v1/robot/manifests
+OUT
+fi
+cat <<OUT
  NOTE: ${IP} is a DHCP address. For a truly stable link, add a DHCP
  reservation for the robot on your router, or put it on Tailscale.
 ======================================================================
