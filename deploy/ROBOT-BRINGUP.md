@@ -131,8 +131,15 @@ online interface.
   roll/pitch/yaw, gyro, quaternion all populated) and real temperatures
   (imu board ~80 °C, motor_max/mean across 35 motors). Adapter logs
   `unitree_g1.lowstate_subscribed` → `g1.lowstate.first_frame`. Safety
-  gate stayed fail-closed. **Battery still 0.0** — `unitree_hg LowState_`
-  has no BMS field, so SOC needs a dedicated topic (B2.6 follow-up).
+  gate stayed fail-closed.
+- **B2.6 (done 2026-07-10):** battery SOC lives on a *separate* topic —
+  `rt/lf/bmsstate` (`unitree_hg BmsState_`, `soc` uint8 0-100), NOT in
+  `LowState_` or `SportModeState_` (found by probing the live robot).
+  The reader now subscribes to both; battery reads ~70% live. Cold-start
+  gotcha: right after an image pull the low-rate bms discovery can lag
+  and battery shows 0.0 until the first frame — a
+  `docker compose restart robot-adapter` populates it within ~10 s.
+  Telemetry is now complete: IMU + temperature + battery.
 
 The real adapter is left **running** (read-only, gate closed). Revert to
 mock: `cd /opt/humanoid-robot && sudo docker compose -f docker-compose.yaml
