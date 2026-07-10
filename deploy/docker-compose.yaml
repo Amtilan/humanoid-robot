@@ -1,0 +1,68 @@
+# humanoid-robot local dev stack.
+#
+#   docker compose -f deploy/docker-compose.yaml up --build
+#
+# Every service comes up with mocks — no vendor SDK required.
+# The dashboard is served on http://localhost:8080/ and proxies to
+# cortex-core (which listens on the docker network as `core:8080`).
+
+x-python-base: &python-base
+  build:
+    context: ..
+    dockerfile: deploy/docker/base.Dockerfile
+  restart: unless-stopped
+  depends_on:
+    nats:
+      condition: service_healthy
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    command:
+      - "-c"
+      - "/etc/nats/nats.conf"
+    volumes:
+      - ./nats.conf:/etc/nats/nats.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8222/ | head -c 1 || exit 1"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  core:
+    <<: *python-base
+    command:
+      - "uvicorn"
+      - "humanoid_robot.core.app:app_from_env"
+      - "--factory"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+    environment:
+      HR_HTTP__PORT: "8080"
+      HR_HTTP__HOST: "0.0.0.0"
+      HR_NATS__SERVERS: '["nats://nats:4222"]'
+      HR_OBSERVABILITY__LOG_LEVEL: "INFO"
+      HR_OBSERVABILITY__TRACING_ENABLED: "false"
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  robot-adapter:
+    <<: *python-base
+    command: ["cortex-robot-adapter", "run", "mock"]
+    environment:
+      HR_ROBOT_ADAPTER__NATS__SERVERS: '["nats://nats:4222"]'
+      HR_ROBOT_ADAPTER__ADAPTER_NAME: "mock"
+      HR_ROBOT_ADAPTER__TELEMETRY_INTERVAL_S: "5"
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: deploy/docker/dashboard.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - core
+    ports:
+      - "127.0.0.1:8081:80"

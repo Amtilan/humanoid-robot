@@ -17,6 +17,11 @@ humanoid-robot-domain = { workspace = true }
 humanoid-robot-events = { workspace = true }
 humanoid-robot-ports = { workspace = true }
 
+# Register the MockRobotAdapter as a discoverable robot adapter so it can be
+# selected via `cortex-robot-adapter run mock` in dev/CI compose stacks.
+[project.entry-points."humanoid_robot.robot_adapters"]
+mock = "humanoid_robot.testing.robot:mock_robot_adapter"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

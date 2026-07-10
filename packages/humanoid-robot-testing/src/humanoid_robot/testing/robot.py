@@ -81,3 +81,8 @@ class MockRobotAdapter:
     @property
     def is_started(self) -> bool:
         return self._started
+
+
+def mock_robot_adapter(**_kwargs: object) -> MockRobotAdapter:
+    """Entry-point factory — instantiates a MockRobotAdapter, ignoring config."""
+    return MockRobotAdapter()
