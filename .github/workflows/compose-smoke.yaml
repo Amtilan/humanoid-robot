@@ -1,0 +1,146 @@
+name: compose-smoke
+
+# End-to-end smoke check for the local compose stack: build the images,
+# bring the platform up, poke each service's health endpoint over HTTP,
+# then tear everything down. Guards the pull-only robot path — if this
+# job goes red the operator's one-liner installer is likely broken.
+#
+# Kept separate from publish-images.yaml so a broken smoke never blocks
+# a release push (semver tags still publish).
+
+on:
+  pull_request:
+    paths:
+      - "deploy/docker/**"
+      - "deploy/docker-compose*.yaml"
+      - "deploy/nats.conf"
+      - "packages/**"
+      - "apps/**"
+      - "plugins/**"
+      - "web/dashboard/**"
+      - "uv.lock"
+      - "pyproject.toml"
+      - ".github/workflows/compose-smoke.yaml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: compose-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: docker compose smoke test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up buildx (with GHA cache)
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: compose-smoke-${{ runner.os }}-${{ hashFiles('deploy/docker/**', 'pyproject.toml', 'uv.lock', 'web/dashboard/pnpm-lock.yaml') }}
+          restore-keys: |
+            compose-smoke-${{ runner.os }}-
+
+      - name: docker compose build
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          cd deploy
+          docker compose build
+
+      - name: docker compose up (detached)
+        run: |
+          cd deploy
+          docker compose up -d
+          docker compose ps
+
+      - name: Wait for cortex-core readiness
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8080/api/v1/system/health/ready > /dev/null; then
+              echo "core ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "cortex-core failed to become ready" >&2
+          exit 1
+
+      - name: Poke health endpoints
+        run: |
+          echo "--- /system/health/live ---"
+          curl -sSf http://127.0.0.1:8080/api/v1/system/health/live | tee /tmp/live.json
+          echo
+          echo "--- /system/health/ready ---"
+          curl -sSf http://127.0.0.1:8080/api/v1/system/health/ready | tee /tmp/ready.json
+          echo
+          echo "--- /safety/status ---"
+          curl -sSf http://127.0.0.1:8080/api/v1/safety/status | head -c 4000
+          echo
+          echo "--- /adapters/groups ---"
+          curl -sSf http://127.0.0.1:8080/api/v1/adapters/groups | head -c 4000
+          echo
+
+      - name: Verify dashboard serves index
+        run: |
+          curl -sSf http://127.0.0.1:8081/ | grep -q '<div id="root"></div>'
+
+      - name: Wait for robot-adapter to publish RobotAdapterReady
+        run: |
+          for i in $(seq 1 30); do
+            body=$(curl -sf http://127.0.0.1:8080/api/v1/robot/manifests || true)
+            if echo "$body" | grep -q '"adapter_name":"mock"'; then
+              echo "manifest observed after ${i}s"
+              echo "$body"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "robot-adapter never registered mock manifest" >&2
+          docker compose -f deploy/docker-compose.yaml logs robot-adapter | tail -100
+          exit 1
+
+      - name: Verify safety telemetry ticks are flowing
+        run: |
+          # DiagnosticsTicker fires every 5s; wait up to 20s for the first tick
+          # to land in the audit log (safety.command.forwarded is per-command
+          # only, so we assert on the timeline API instead).
+          for i in $(seq 1 20); do
+            body=$(curl -sf http://127.0.0.1:8080/api/v1/diagnostics/host || true)
+            if echo "$body" | grep -q '"cpu"'; then
+              echo "diagnostics live after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "diagnostics endpoint never returned live host stats" >&2
+          exit 1
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          cd deploy
+          echo "==== nats ===="
+          docker compose logs nats | tail -80
+          echo "==== core ===="
+          docker compose logs core | tail -200
+          echo "==== robot-adapter ===="
+          docker compose logs robot-adapter | tail -200
+          echo "==== dashboard ===="
+          docker compose logs dashboard | tail -80
+
+      - name: docker compose down
+        if: always()
+        run: |
+          cd deploy
+          docker compose down -v --remove-orphans
