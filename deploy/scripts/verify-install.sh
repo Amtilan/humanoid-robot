@@ -223,6 +223,7 @@ check_voice_process() {
     if (( CHECKS_VOICE )); then
         if docker ps --format '{{.Names}}' | grep -q '^deploy-voice-1$\|^humanoid-robot-voice-1$'; then
             record voice.container ok "container running"
+            probe_jetson_runtime voice
         else
             record voice.container fail "voice container not up (docker compose --profile voice)"
         fi
@@ -235,11 +236,41 @@ check_rag_process() {
     if (( CHECKS_RAG )); then
         if docker ps --format '{{.Names}}' | grep -q '^deploy-rag-1$\|^humanoid-robot-rag-1$'; then
             record rag.container ok "container running"
+            probe_jetson_runtime rag
         else
             record rag.container fail "rag container not up (docker compose --profile rag)"
         fi
     else
         record rag.container skip "not requested (--with rag)"
+    fi
+}
+
+# Verifies the Jetson overlay landed on the container's runtime when
+# we're actually running on Jetson hardware. Skipped otherwise so
+# CI on plain x86 doesn't fail.
+probe_jetson_runtime() {
+    local svc="$1"
+    local check_name="${svc}.gpu"
+    if ! command -v docker >/dev/null 2>&1; then
+        record "${check_name}" skip "docker CLI missing"
+        return
+    fi
+    if ! [[ -f /etc/nv_tegra_release || -f /proc/device-tree/compatible ]]; then
+        record "${check_name}" skip "not on Jetson"
+        return
+    fi
+    local cid
+    cid=$(docker ps --filter "name=${svc}" --format '{{.ID}}' | head -n1 || true)
+    if [[ -z "${cid}" ]]; then
+        record "${check_name}" skip "container id unknown"
+        return
+    fi
+    local runtime
+    runtime=$(docker inspect -f '{{.HostConfig.Runtime}}' "${cid}" 2>/dev/null || true)
+    if [[ "${runtime}" == "nvidia" ]]; then
+        record "${check_name}" ok "runtime=nvidia"
+    else
+        record "${check_name}" fail "runtime=${runtime:-<unset>} (overlay missing?)"
     fi
 }
 

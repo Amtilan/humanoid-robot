@@ -1,0 +1,40 @@
+# Jetson overlay — combine with docker-compose.pull.yaml on the robot:
+#
+#   COMPOSE_FILE=docker-compose.yaml:docker-compose.jetson.yaml \
+#       docker compose --profile voice --profile rag up -d
+#
+# `install-on-robot.sh` auto-detects Jetson (checks
+# /etc/nv_tegra_release) and writes the COMPOSE_FILE env var into
+# /opt/humanoid-robot/.env so `docker compose` reads both files
+# by default afterwards.
+#
+# Prereq: nvidia-container-runtime must be installed on the host.
+# JetPack ships it by default; on stock Ubuntu, install
+# nvidia-container-toolkit and add `default-runtime: "nvidia"` to
+# /etc/docker/daemon.json before this overlay does anything useful.
+#
+# What this overlay actually enables:
+#   * runtime: nvidia — routes container startup through the NVIDIA
+#     runtime so the Tegra iGPU is visible.
+#   * NVIDIA_VISIBLE_DEVICES=all — mounts every accessible device.
+#   * NVIDIA_DRIVER_CAPABILITIES=compute,utility,video — needed for
+#     CUDA + hardware video decode (whisper mel-spectrogram pipeline).
+#
+# Caveat: the current base image is CPU-only python:3.12-slim; even
+# with the runtime forwarded, faster-whisper / BGE-M3 / llama.cpp
+# fall back to CPU because CUDA libs aren't in the container. A
+# Jetson-native base variant (nvcr.io/nvidia/l4t-*) lands in a
+# follow-up round; this overlay establishes the plumbing.
+
+services:
+  voice:
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
+
+  rag:
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video

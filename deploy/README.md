@@ -148,6 +148,40 @@ Bundled alerts (see `deploy/observability/rules/humanoid-robot.yml`):
 - `CortexCoreHighCPU` (warning): rate ≥ 90 % sustained for 5 min.
 - `CortexCoreMemoryHigh` (warning): RSS > 1 GiB for 10 min.
 
+### Jetson GPU passthrough (auto-applied)
+
+On any Jetson (any JetPack release), `install-on-robot.sh` detects
+the box via `/etc/nv_tegra_release` and writes
+`COMPOSE_FILE=docker-compose.yaml:docker-compose.jetson.yaml` into
+`/opt/humanoid-robot/.env`. From then on `docker compose` layers the
+overlay automatically:
+
+- Adds `runtime: nvidia` + `NVIDIA_VISIBLE_DEVICES=all` +
+  `NVIDIA_DRIVER_CAPABILITIES=compute,utility,video` to the `voice`
+  and `rag` services so the Tegra iGPU is visible inside the
+  containers.
+- Base compose is untouched; nothing enables GPU work outside those
+  two services.
+
+Manually enable the overlay elsewhere:
+
+```bash
+COMPOSE_FILE=docker-compose.yaml:docker-compose.jetson.yaml \
+    docker compose --profile voice --profile rag up -d
+```
+
+Prereq — the host has `nvidia-container-runtime` installed and Docker
+knows about it. JetPack ships it by default. On stock Ubuntu install
+`nvidia-container-toolkit`, then add `"default-runtime": "nvidia"` to
+`/etc/docker/daemon.json` (or leave the default runtime alone and
+this overlay's `runtime: nvidia` still takes effect).
+
+**Caveat**: the current base image is CPU-only. Even with the
+runtime forwarded, `faster-whisper` / BGE-M3 / llama.cpp fall back
+to CPU because CUDA libraries aren't in the image. A Jetson-native
+base variant (`nvcr.io/nvidia/l4t-*`) lands in a follow-up round;
+this overlay establishes the plumbing.
+
 Switch to the real robot:
 
 ```bash

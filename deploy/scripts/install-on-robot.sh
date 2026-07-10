@@ -54,6 +54,9 @@ main() {
     install -d -m 0755 /var/lib/humanoid-robot/models
 
     fetch deploy/docker-compose.pull.yaml "${INSTALL_DIR}/docker-compose.yaml"
+    fetch deploy/docker-compose.jetson.yaml "${INSTALL_DIR}/docker-compose.jetson.yaml"
+    fetch deploy/scripts/detect-jetson.sh "${INSTALL_DIR}/detect-jetson.sh"
+    chmod +x "${INSTALL_DIR}/detect-jetson.sh"
     fetch deploy/nats.conf                "${INSTALL_DIR}/nats.conf"
     fetch deploy/scripts/fetch-models.sh  "${INSTALL_DIR}/fetch-models.sh"
     chmod +x "${INSTALL_DIR}/fetch-models.sh"
@@ -103,11 +106,19 @@ main() {
         fi
     done
 
+    local compose_files="docker-compose.yaml"
+    if bash "${INSTALL_DIR}/detect-jetson.sh" > /dev/null 2>&1; then
+        compose_files="docker-compose.yaml:docker-compose.jetson.yaml"
+        echo
+        echo "Detected Jetson — enabling GPU passthrough overlay in COMPOSE_FILE."
+    fi
+
     cat >"${INSTALL_DIR}/.env" <<EOF
 IMAGE_REGISTRY=ghcr.io
 IMAGE_OWNER=amtilan
 IMAGE_TAG=${IMAGE_TAG}
 HR_ROBOT_ADAPTER__ADAPTER_NAME=mock
+COMPOSE_FILE=${compose_files}
 EOF
     chmod 0640 "${INSTALL_DIR}/.env"
 
