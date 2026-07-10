@@ -1,7 +1,7 @@
 """MockRobotAdapter — a programmable robot for tests.
 
-Constructor accepts a `RobotManifest` and per-command handlers. All command
-invocations are recorded for assertions.
+Constructor accepts a `RobotManifest`. All command invocations are recorded
+via the `.locomotion` sub-adapter for assertions.
 """
 
 from __future__ import annotations
@@ -20,6 +20,30 @@ from humanoid_robot.domain.robot import (
 
 
 @dataclass(slots=True)
+class MockLocomotion:
+    """A LocomotionPort that just records what it was asked to do."""
+
+    _moves: list[MoveCommand] = field(default_factory=list)
+    _stops: list[StopCommand] = field(default_factory=list)
+
+    async def move(self, cmd: MoveCommand) -> RobotCommandResult:
+        self._moves.append(cmd)
+        return RobotCommandResult(outcome=MoveOutcome.ACCEPTED)
+
+    async def stop(self, cmd: StopCommand) -> RobotCommandResult:
+        self._stops.append(cmd)
+        return RobotCommandResult(outcome=MoveOutcome.ACCEPTED)
+
+    @property
+    def moves(self) -> list[MoveCommand]:
+        return list(self._moves)
+
+    @property
+    def stops(self) -> list[StopCommand]:
+        return list(self._stops)
+
+
+@dataclass(slots=True)
 class MockRobotAdapter:
     """A robot whose responses are entirely under test control."""
 
@@ -31,8 +55,7 @@ class MockRobotAdapter:
             capabilities=RobotCapabilities(),
         )
     )
-    _moves: list[MoveCommand] = field(default_factory=list)
-    _stops: list[StopCommand] = field(default_factory=list)
+    locomotion: MockLocomotion = field(default_factory=MockLocomotion)
     _started: bool = False
 
     @property
@@ -45,23 +68,15 @@ class MockRobotAdapter:
     async def stop(self) -> None:
         self._started = False
 
-    async def move(self, cmd: MoveCommand) -> RobotCommandResult:
-        self._moves.append(cmd)
-        return RobotCommandResult(outcome=MoveOutcome.ACCEPTED)
-
-    async def emergency_stop(self, cmd: StopCommand) -> RobotCommandResult:
-        self._stops.append(cmd)
-        return RobotCommandResult(outcome=MoveOutcome.ACCEPTED)
-
     # ---- assertion helpers ---------------------------------------------------
 
     @property
     def moves(self) -> list[MoveCommand]:
-        return list(self._moves)
+        return self.locomotion.moves
 
     @property
     def stops(self) -> list[StopCommand]:
-        return list(self._stops)
+        return self.locomotion.stops
 
     @property
     def is_started(self) -> bool:

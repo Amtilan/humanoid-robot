@@ -16,6 +16,20 @@ from humanoid_robot.ports import EventBusPort, LocomotionPort, RobotAdapterPort
 from humanoid_robot.robot_adapter_app.dispatcher import CommandDispatcher
 from humanoid_robot.robot_adapter_app.settings import RobotAdapterSettings
 
+
+def _resolve_locomotion(adapter: RobotAdapterPort) -> LocomotionPort | None:
+    """Prefer an explicit `.locomotion` sub-adapter over duck-typing on root.
+
+    Duck-typing the root would match the lifecycle `stop()` and the
+    LocomotionPort `stop(cmd)` at the same name — dispatching a StopCommand
+    would then reach the lifecycle method.  Sub-adapter keeps them separated.
+    """
+    sub = getattr(adapter, "locomotion", None)
+    if sub is not None and isinstance(sub, LocomotionPort):
+        return sub
+    return None
+
+
 _LOG = get_logger("cortex-robot-adapter")
 
 
@@ -59,8 +73,9 @@ class AdapterRunner:
         self._adapter = adapter
 
         dispatcher = CommandDispatcher(bus=bus, producer=self.settings.service_name)
-        if isinstance(adapter, LocomotionPort):
-            dispatcher.register_locomotion(adapter)
+        locomotion = _resolve_locomotion(adapter)
+        if locomotion is not None:
+            dispatcher.register_locomotion(locomotion)
         await dispatcher.start()
         self._dispatcher = dispatcher
 

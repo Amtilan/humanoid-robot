@@ -89,7 +89,7 @@ class TestAdapterIntegration:
         adapter = UnitreeG1Adapter()
         adapter.attach_locomotion_client(client)
 
-        result = await adapter.move(
+        result = await adapter.locomotion.move(
             MoveCommand(linear_x_mps=0.4, linear_y_mps=0.0, angular_z_rps=0.0, duration_ms=200)
         )
         assert result.outcome == MoveOutcome.ACCEPTED
@@ -100,7 +100,7 @@ class TestAdapterIntegration:
         adapter = UnitreeG1Adapter()
         adapter.attach_locomotion_client(client)
 
-        result = await adapter.stop_locomotion(StopCommand())
+        result = await adapter.locomotion.stop(StopCommand())
         assert result.outcome == MoveOutcome.ACCEPTED
         assert client.stop_calls == 1
 

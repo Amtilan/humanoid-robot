@@ -38,7 +38,7 @@ async def test_dispatcher_forwards_move_to_locomotion() -> None:
     bus = InMemoryEventBus()
     adapter = MockRobotAdapter()
     dispatcher = CommandDispatcher(bus=bus)
-    dispatcher.register_locomotion(adapter)
+    dispatcher.register_locomotion(adapter.locomotion)
     await dispatcher.start()
 
     await bus.publish(

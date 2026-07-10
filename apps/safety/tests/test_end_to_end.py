@@ -51,7 +51,7 @@ async def test_released_estop_full_loop() -> None:
     )
     adapter = MockRobotAdapter()
     dispatcher = CommandDispatcher(bus=bus)
-    dispatcher.register_locomotion(adapter)
+    dispatcher.register_locomotion(adapter.locomotion)
 
     gate_task = asyncio.create_task(gate.run())
     await dispatcher.start()
@@ -99,7 +99,7 @@ async def test_velocity_over_limit_denied_before_adapter() -> None:
     )
     adapter = MockRobotAdapter()
     dispatcher = CommandDispatcher(bus=bus)
-    dispatcher.register_locomotion(adapter)
+    dispatcher.register_locomotion(adapter.locomotion)
 
     gate_task = asyncio.create_task(gate.run())
     await dispatcher.start()
@@ -142,7 +142,7 @@ async def test_engaged_estop_never_reaches_adapter() -> None:
     )
     adapter = MockRobotAdapter()
     dispatcher = CommandDispatcher(bus=bus)
-    dispatcher.register_locomotion(adapter)
+    dispatcher.register_locomotion(adapter.locomotion)
 
     gate_task = asyncio.create_task(gate.run())
     await dispatcher.start()

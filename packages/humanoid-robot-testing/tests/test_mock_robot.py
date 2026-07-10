@@ -20,13 +20,13 @@ class TestMockRobotAdapter:
     async def test_records_move_calls(self) -> None:
         adapter = MockRobotAdapter()
         cmd = MoveCommand(linear_x_mps=0.5, linear_y_mps=0.0, angular_z_rps=0.0)
-        result = await adapter.move(cmd)
+        result = await adapter.locomotion.move(cmd)
         assert result.outcome == MoveOutcome.ACCEPTED
         assert adapter.moves == [cmd]
 
     async def test_records_stop_calls(self) -> None:
         adapter = MockRobotAdapter()
         cmd = StopCommand(reason="test")
-        result = await adapter.emergency_stop(cmd)
+        result = await adapter.locomotion.stop(cmd)
         assert result.outcome == MoveOutcome.ACCEPTED
         assert adapter.stops == [cmd]

@@ -17,13 +17,7 @@ from pydantic import BaseModel, Field
 from humanoid_robot.adapters.unitree_g1.locomotion import UnitreeG1LocomotionAdapter
 from humanoid_robot.adapters.unitree_g1.manifest import build_manifest
 from humanoid_robot.adapters.unitree_g1.sdk import require_sdk
-from humanoid_robot.domain.robot import (
-    MoveCommand,
-    RobotCapabilities,
-    RobotCommandResult,
-    RobotManifest,
-    StopCommand,
-)
+from humanoid_robot.domain.robot import RobotCapabilities, RobotManifest
 
 _LOG = logging.getLogger(__name__)
 
@@ -104,12 +98,15 @@ class UnitreeG1Adapter:
             self._started = False
             _LOG.info("unitree_g1.stopped")
 
-    # ---- LocomotionPort ------------------------------------------------------
+    # ---- Sub-ports -----------------------------------------------------------
     #
-    # Duck-typing exposure: the CommandDispatcher probes `isinstance(adapter,
-    # LocomotionPort)` at wire-up; both `move` and `stop` below satisfy it.
+    # The `locomotion` attribute is what the AdapterRunner picks up when
+    # wiring the CommandDispatcher.  Splitting it out this way keeps the
+    # LocomotionPort's `move`/`stop` methods from colliding with the root
+    # adapter's lifecycle `stop()`.
 
-    def _locomotion_adapter(self) -> UnitreeG1LocomotionAdapter:
+    @property
+    def locomotion(self) -> UnitreeG1LocomotionAdapter:
         if self._locomotion is None:
             self._locomotion = UnitreeG1LocomotionAdapter()
         return self._locomotion
@@ -117,10 +114,3 @@ class UnitreeG1Adapter:
     def attach_locomotion_client(self, client: object) -> None:
         """Test hook: inject a fake LocoClient before dispatching commands."""
         self._locomotion = UnitreeG1LocomotionAdapter(client=client)
-
-    async def move(self, cmd: MoveCommand) -> RobotCommandResult:
-        return await self._locomotion_adapter().move(cmd)
-
-    async def stop_locomotion(self, cmd: StopCommand) -> RobotCommandResult:
-        # Named to avoid clashing with adapter lifecycle `stop()` above.
-        return await self._locomotion_adapter().stop(cmd)
