@@ -14,6 +14,7 @@ from typing import Self
 
 from pydantic import BaseModel, Field
 
+from humanoid_robot.adapters.unitree_g1.arm import UnitreeG1Arm
 from humanoid_robot.adapters.unitree_g1.locomotion import UnitreeG1LocomotionAdapter
 from humanoid_robot.adapters.unitree_g1.manifest import build_manifest
 from humanoid_robot.adapters.unitree_g1.sdk import require_sdk
@@ -41,6 +42,7 @@ class UnitreeG1Adapter:
     _started: bool = False
     _start_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     _locomotion: UnitreeG1LocomotionAdapter | None = None
+    _arm: UnitreeG1Arm | None = None
 
     def __init__(self, **kwargs: object) -> None:
         # Adapter registry passes kwargs; validate through the settings model.
@@ -49,6 +51,7 @@ class UnitreeG1Adapter:
         self._started = False
         self._start_lock = asyncio.Lock()
         self._locomotion = None
+        self._arm = None
 
     @classmethod
     def from_settings(cls, settings: UnitreeG1Settings) -> Self:
@@ -58,6 +61,7 @@ class UnitreeG1Adapter:
         obj._started = False
         obj._start_lock = asyncio.Lock()
         obj._locomotion = None
+        obj._arm = None
         return obj
 
     # ---- RobotAdapterPort ---------------------------------------------------
@@ -114,3 +118,17 @@ class UnitreeG1Adapter:
     def attach_locomotion_client(self, client: object) -> None:
         """Test hook: inject a fake LocoClient before dispatching commands."""
         self._locomotion = UnitreeG1LocomotionAdapter(client=client)
+
+    @property
+    def arm(self) -> UnitreeG1Arm:
+        if self._arm is None:
+            self._arm = UnitreeG1Arm()
+        return self._arm
+
+    def attach_arm_client(
+        self, client: object, *, action_map: dict[str, int] | None = None
+    ) -> None:
+        """Test hook: inject a fake G1ArmActionClient with an action_map."""
+        arm = UnitreeG1Arm()
+        arm.attach_client(client, action_map=action_map)
+        self._arm = arm

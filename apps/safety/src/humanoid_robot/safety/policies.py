@@ -12,7 +12,7 @@ from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from humanoid_robot.domain.robot import MoveCommand, StopCommand
 from humanoid_robot.ports import SafetyDecision, SafetyPolicyPort, SafetyRequest
@@ -77,9 +77,16 @@ class RateLimitPolicy:
         return SafetyDecision(verdict="allow", reason="within rate limit")
 
 
+class ArmGesturePayload(BaseModel):
+    """Payload schema for `arms.gesture` commands."""
+
+    gesture: str = Field(min_length=1, max_length=64)
+
+
 DEFAULT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "locomotion.move": MoveCommand,
     "locomotion.stop": StopCommand,
+    "arms.gesture": ArmGesturePayload,
 }
 
 

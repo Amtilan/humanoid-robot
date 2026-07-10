@@ -102,6 +102,28 @@ export function RobotPage() {
             variant="warning"
           />
           <CmdButton
+            label="👋 wave"
+            onClick={() =>
+              command.mutate({
+                capability: "arms.gesture",
+                payload: { gesture: "high wave" },
+                submitter,
+              })
+            }
+            disabled={command.isPending}
+          />
+          <CmdButton
+            label="↓ release arm"
+            onClick={() =>
+              command.mutate({
+                capability: "arms.gesture",
+                payload: { gesture: "release arm" },
+                submitter,
+              })
+            }
+            disabled={command.isPending}
+          />
+          <CmdButton
             label="■ stop"
             onClick={() =>
               command.mutate({

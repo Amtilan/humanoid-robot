@@ -50,9 +50,24 @@ async def test_out_of_range_denies() -> None:
 @pytest.mark.asyncio
 async def test_unknown_capability_passes_through() -> None:
     policy = PayloadSchemaPolicy()
-    decision = await policy.evaluate(_req("arms.gesture", {"name": "wave"}))
+    decision = await policy.evaluate(_req("head.pose", {"pitch": 0.1}))
     assert decision.verdict == "allow"
     assert "no schema" in decision.reason
+
+
+@pytest.mark.asyncio
+async def test_arms_gesture_valid_payload_allows() -> None:
+    policy = PayloadSchemaPolicy()
+    decision = await policy.evaluate(_req("arms.gesture", {"gesture": "high wave"}))
+    assert decision.verdict == "allow"
+
+
+@pytest.mark.asyncio
+async def test_arms_gesture_missing_field_denies() -> None:
+    policy = PayloadSchemaPolicy()
+    decision = await policy.evaluate(_req("arms.gesture", {}))
+    assert decision.verdict == "deny"
+    assert "gesture" in decision.reason
 
 
 @pytest.mark.asyncio

@@ -12,7 +12,7 @@ from humanoid_robot.events import RobotAdapterReady, SystemShuttingDown
 from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.observability import get_logger
 from humanoid_robot.plugins_sdk import AdapterRegistry
-from humanoid_robot.ports import EventBusPort, LocomotionPort, RobotAdapterPort
+from humanoid_robot.ports import ArmPort, EventBusPort, LocomotionPort, RobotAdapterPort
 from humanoid_robot.robot_adapter_app.dispatcher import CommandDispatcher
 from humanoid_robot.robot_adapter_app.settings import RobotAdapterSettings
 
@@ -26,6 +26,13 @@ def _resolve_locomotion(adapter: RobotAdapterPort) -> LocomotionPort | None:
     """
     sub = getattr(adapter, "locomotion", None)
     if sub is not None and isinstance(sub, LocomotionPort):
+        return sub
+    return None
+
+
+def _resolve_arm(adapter: RobotAdapterPort) -> ArmPort | None:
+    sub = getattr(adapter, "arm", None)
+    if sub is not None and isinstance(sub, ArmPort):
         return sub
     return None
 
@@ -76,6 +83,9 @@ class AdapterRunner:
         locomotion = _resolve_locomotion(adapter)
         if locomotion is not None:
             dispatcher.register_locomotion(locomotion)
+        arm = _resolve_arm(adapter)
+        if arm is not None:
+            dispatcher.register_arm(arm)
         await dispatcher.start()
         self._dispatcher = dispatcher
 

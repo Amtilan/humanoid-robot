@@ -31,7 +31,7 @@ from humanoid_robot.events import (
 )
 from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.observability import get_logger
-from humanoid_robot.ports import EventBusPort, LocomotionPort, Subscription
+from humanoid_robot.ports import ArmPort, EventBusPort, LocomotionPort, Subscription
 
 _LOG = get_logger("cortex-robot-adapter.dispatcher")
 
@@ -60,6 +60,23 @@ class CommandDispatcher:
 
         self.register("locomotion.move", _move)
         self.register("locomotion.stop", _stop)
+
+    def register_arm(self, arm: ArmPort) -> None:
+        async def _gesture(payload: dict[str, object]) -> RobotCommandResult:
+            name = payload.get("gesture")
+            if not isinstance(name, str) or not name:
+                return RobotCommandResult(
+                    outcome=MoveOutcome.REJECTED_BY_POLICY,
+                    error_code="missing_gesture",
+                    error_message="payload must include 'gesture': str",
+                )
+            return await arm.perform_gesture(name)
+
+        async def _release(_payload: dict[str, object]) -> RobotCommandResult:
+            return await arm.release()
+
+        self.register("arms.gesture", _gesture)
+        self.register("arms.release", _release)
 
     async def start(self) -> None:
         if self._subscription is not None:

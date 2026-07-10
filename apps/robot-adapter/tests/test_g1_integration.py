@@ -13,7 +13,7 @@ from humanoid_robot.domain.shared import new_correlation_id
 from humanoid_robot.events import RobotCommandResulted, SafetyCommandForwarded
 from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.robot_adapter_app.dispatcher import CommandDispatcher
-from humanoid_robot.robot_adapter_app.runner import _resolve_locomotion
+from humanoid_robot.robot_adapter_app.runner import _resolve_arm, _resolve_locomotion
 from humanoid_robot.testing import InMemoryEventBus
 
 
@@ -93,6 +93,66 @@ async def test_dispatcher_drives_g1_move_end_to_end() -> None:
     result = next(ev for ev in bus.published if isinstance(ev, RobotCommandResulted))
     assert result.result.outcome == MoveOutcome.ACCEPTED
     assert fake_client.move_calls == [(0.4, 0.0, 0.2, 0.6)]
+
+    await dispatcher.stop()
+
+
+@dataclass(slots=True)
+class _FakeArmClient:
+    executed: list[int] = field(default_factory=list)
+
+    def SetTimeout(self, _t: float) -> None:  # noqa: N802
+        return None
+
+    def Init(self) -> None:  # noqa: N802
+        return None
+
+    def ExecuteAction(self, action_id: int) -> int:  # noqa: N802
+        self.executed.append(action_id)
+        return 0
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_drives_g1_arm_gesture_end_to_end() -> None:
+    bus = InMemoryEventBus()
+    adapter = UnitreeG1Adapter()
+    fake_arm = _FakeArmClient()
+    adapter.attach_arm_client(fake_arm, action_map={"high wave": 22, "release arm": 99})
+
+    dispatcher = CommandDispatcher(bus=bus)
+    arm = _resolve_arm(adapter)
+    assert arm is not None
+    dispatcher.register_arm(arm)
+    await dispatcher.start()
+
+    await bus.publish(_forward("arms.gesture", {"gesture": "high wave"}))
+    await _wait_for(lambda: any(isinstance(ev, RobotCommandResulted) for ev in bus.published))
+
+    result = next(ev for ev in bus.published if isinstance(ev, RobotCommandResulted))
+    assert result.result.outcome == MoveOutcome.ACCEPTED
+    assert fake_arm.executed == [22]
+
+    await dispatcher.stop()
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_arm_missing_gesture_field_rejected() -> None:
+    bus = InMemoryEventBus()
+    adapter = UnitreeG1Adapter()
+    adapter.attach_arm_client(_FakeArmClient(), action_map={"high wave": 22})
+
+    dispatcher = CommandDispatcher(bus=bus)
+    arm = _resolve_arm(adapter)
+    assert arm is not None
+    dispatcher.register_arm(arm)
+    await dispatcher.start()
+
+    await bus.publish(_forward("arms.gesture", {}))  # missing 'gesture'
+    await _wait_for(lambda: any(isinstance(ev, RobotCommandResulted) for ev in bus.published))
+
+    result = next(ev for ev in bus.published if isinstance(ev, RobotCommandResulted))
+    assert result.result.outcome == MoveOutcome.REJECTED_BY_POLICY
+    assert result.result.error_code == "missing_gesture"
 
     await dispatcher.stop()
 
