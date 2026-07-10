@@ -197,6 +197,8 @@ export const api = {
   deactivatePlugin: (name: string) =>
     postJson<PluginStatus>(`/api/v1/plugins/${encodeURIComponent(name)}/deactivate`),
   robotManifests: () => getJson<RobotManifestSnapshot[]>("/api/v1/robot/manifests"),
+  robotCommand: (body: { capability: string; payload: Record<string, unknown> }) =>
+    postJson<{ command_id: string }, typeof body>("/api/v1/robot/commands", body),
   ragAsk: (body: RagAskRequest) => postJson<RagAskResponse, RagAskRequest>("/api/v1/rag/ask", body),
   ragAskStart: (body: RagAskRequest) =>
     postJson<{ session_id: string }, RagAskRequest>("/api/v1/rag/ask/start", body),

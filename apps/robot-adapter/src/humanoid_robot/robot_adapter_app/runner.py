@@ -12,7 +12,8 @@ from humanoid_robot.events import RobotAdapterReady, SystemShuttingDown
 from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.observability import get_logger
 from humanoid_robot.plugins_sdk import AdapterRegistry
-from humanoid_robot.ports import EventBusPort, RobotAdapterPort
+from humanoid_robot.ports import EventBusPort, LocomotionPort, RobotAdapterPort
+from humanoid_robot.robot_adapter_app.dispatcher import CommandDispatcher
 from humanoid_robot.robot_adapter_app.settings import RobotAdapterSettings
 
 _LOG = get_logger("cortex-robot-adapter")
@@ -24,6 +25,7 @@ class AdapterRunner:
     registry: AdapterRegistry = field(default_factory=AdapterRegistry.discover)
     _adapter: RobotAdapterPort | None = None
     _bus: EventBusPort | None = None
+    _dispatcher: CommandDispatcher | None = None
     _stop: asyncio.Event = field(default_factory=asyncio.Event)
 
     def request_stop(self) -> None:
@@ -56,6 +58,12 @@ class AdapterRunner:
         await adapter.start()
         self._adapter = adapter
 
+        dispatcher = CommandDispatcher(bus=bus, producer=self.settings.service_name)
+        if isinstance(adapter, LocomotionPort):
+            dispatcher.register_locomotion(adapter)
+        await dispatcher.start()
+        self._dispatcher = dispatcher
+
         await bus.publish(
             RobotAdapterReady(
                 meta=EventMetadata(
@@ -68,10 +76,19 @@ class AdapterRunner:
                 capabilities=adapter.capabilities,
             )
         )
-        _LOG.info("adapter_runner.ready", adapter=adapter.manifest.adapter_name)
+        _LOG.info(
+            "adapter_runner.ready",
+            adapter=adapter.manifest.adapter_name,
+            capabilities=sorted(dispatcher.handlers.keys()),
+        )
 
     async def _teardown(self) -> None:
         _LOG.info("adapter_runner.shutting_down")
+        if self._dispatcher is not None:
+            try:
+                await self._dispatcher.stop()
+            except Exception:
+                _LOG.exception("dispatcher stop raised")
         if self._bus is not None:
             try:
                 await self._bus.publish(

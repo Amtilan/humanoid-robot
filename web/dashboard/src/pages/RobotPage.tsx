@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api, type RobotManifestSnapshot } from "../api/client";
@@ -6,6 +6,7 @@ import {
   useEventSubscription,
   type EventEnvelope,
 } from "../lib/eventStream";
+import { useToast } from "../lib/toast";
 
 const MAX_FEED = 40;
 
@@ -20,6 +21,26 @@ export function RobotPage() {
     setFeed((prev) => [envelope, ...prev].slice(0, MAX_FEED));
   });
 
+  const { push } = useToast();
+  const command = useMutation({
+    mutationFn: (body: { capability: string; payload: Record<string, unknown> }) =>
+      api.robotCommand(body),
+    onSuccess: (ack) =>
+      push({ kind: "info", title: "Command dispatched", description: ack.command_id }),
+    onError: (err) =>
+      push({ kind: "error", title: "Command failed", description: String(err) }),
+  });
+
+  const sendMove = (
+    linear_x_mps: number,
+    angular_z_rps: number,
+    duration_ms: number,
+  ) =>
+    command.mutate({
+      capability: "locomotion.move",
+      payload: { linear_x_mps, linear_y_mps: 0, angular_z_rps, duration_ms },
+    });
+
   return (
     <div className="space-y-6">
       <div>
@@ -27,6 +48,42 @@ export function RobotPage() {
         <p className="text-sm text-muted-foreground">
           Latest manifest reported by each adapter on the bus.
         </p>
+      </div>
+
+      <div className="rounded-lg border border-border bg-background/40 p-4">
+        <h2 className="pb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Command tester
+        </h2>
+        <p className="pb-3 text-xs text-muted-foreground">
+          Publishes <code>robot.command.requested</code>. The safety gate
+          decides whether it becomes <code>safety.command.forwarded</code>.
+          Release E-STOP first if commands are being denied.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <CmdButton
+            label="↑ walk 0.3 m/s"
+            onClick={() => sendMove(0.3, 0, 800)}
+            disabled={command.isPending}
+          />
+          <CmdButton
+            label="↓ back 0.3 m/s"
+            onClick={() => sendMove(-0.3, 0, 800)}
+            disabled={command.isPending}
+          />
+          <CmdButton
+            label="↻ turn +0.5 rad/s"
+            onClick={() => sendMove(0, 0.5, 600)}
+            disabled={command.isPending}
+          />
+          <CmdButton
+            label="■ stop"
+            onClick={() =>
+              command.mutate({ capability: "locomotion.stop", payload: {} })
+            }
+            disabled={command.isPending}
+            variant="danger"
+          />
+        </div>
       </div>
 
       {manifestsQuery.isPending ? (
@@ -117,5 +174,29 @@ function Info({ label, value }: { label: string; value: string }) {
       </div>
       <div className="font-mono">{value}</div>
     </div>
+  );
+}
+
+function CmdButton({
+  label,
+  onClick,
+  disabled,
+  variant = "default",
+}: {
+  label: string;
+  onClick: () => void;
+  disabled: boolean;
+  variant?: "default" | "danger";
+}) {
+  const base =
+    "rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-40";
+  const style =
+    variant === "danger"
+      ? "border-red-500/50 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+      : "border-border bg-background/60 hover:bg-accent hover:text-accent-foreground";
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className={`${base} ${style}`}>
+      {label}
+    </button>
   );
 }
