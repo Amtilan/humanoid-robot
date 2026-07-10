@@ -1,0 +1,73 @@
+# humanoid-robot — pull-only compose file for the robot.
+#
+# No `build:` blocks. The only artefacts on the robot are this file
+# plus /etc/humanoid-robot/*.env overrides. Pull + start:
+#
+#   IMAGE_TAG=main docker compose -f docker-compose.pull.yaml pull
+#   IMAGE_TAG=main docker compose -f docker-compose.pull.yaml up -d
+#
+# Pin IMAGE_TAG to a signed release tag in production (e.g. v1.0.0).
+
+x-python-base: &python-base
+  image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_OWNER:-amtilan}/humanoid-robot-base:${IMAGE_TAG:-main}
+  restart: unless-stopped
+  depends_on:
+    nats:
+      condition: service_healthy
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    command:
+      - "-c"
+      - "/etc/nats/nats.conf"
+    volumes:
+      - ./nats.conf:/etc/nats/nats.conf:ro
+      - nats-jetstream:/tmp/nats/jetstream
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8222/ | head -c 1 || exit 1"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  core:
+    <<: *python-base
+    command: ["cortex-core", "serve"]
+    environment:
+      HR_HTTP__PORT: "8080"
+      HR_HTTP__HOST: "0.0.0.0"
+      HR_NATS__SERVERS: '["nats://nats:4222"]'
+      HR_OBSERVABILITY__LOG_LEVEL: "INFO"
+      HR_OBSERVABILITY__TRACING_ENABLED: "false"
+    env_file:
+      - path: /etc/humanoid-robot/cortex-core.env
+        required: false
+    volumes:
+      # Persist the audit SQLite + any future core state across restarts.
+      - core-state:/var/lib/humanoid-robot
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  robot-adapter:
+    <<: *python-base
+    command: ["cortex-robot-adapter", "run", "${HR_ROBOT_ADAPTER__ADAPTER_NAME:-mock}"]
+    environment:
+      HR_ROBOT_ADAPTER__NATS__SERVERS: '["nats://nats:4222"]'
+      HR_ROBOT_ADAPTER__ADAPTER_NAME: "${HR_ROBOT_ADAPTER__ADAPTER_NAME:-mock}"
+      HR_ROBOT_ADAPTER__TELEMETRY_INTERVAL_S: "5"
+    env_file:
+      - path: /etc/humanoid-robot/cortex-robot-adapter.env
+        required: false
+
+  dashboard:
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_OWNER:-amtilan}/humanoid-robot-dashboard:${IMAGE_TAG:-main}
+    restart: unless-stopped
+    depends_on:
+      - core
+    ports:
+      - "127.0.0.1:8081:80"
+
+volumes:
+  nats-jetstream:
+  core-state:

@@ -1,8 +1,63 @@
 # Deployment
 
-Everything under `deploy/` runs the platform outside a developer's uv
-workspace: Docker Compose for local integration testing, and (in
-later rounds) systemd units + Ansible for the Jetson.
+Two supported install paths:
+
+- **Robot side** — no source, no build tools. Pull prebuilt OCI images
+  from GHCR, one compose file, `docker compose up`. See
+  [Robot-side install (no git clone)](#robot-side-install-no-git-clone).
+- **Developer laptop / CI** — source-built compose stack for iterating
+  on the platform. See [Local dev compose stack](#local-compose-stack).
+
+The robot must **never** need to `git clone` this repo or run
+`uv sync`. Every deployment round preserves both paths side-by-side.
+
+## Robot-side install (no git clone)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Amtilan/humanoid-robot/main/deploy/scripts/install-on-robot.sh | sudo bash
+cd /opt/humanoid-robot
+docker compose up -d
+```
+
+That's it. The installer:
+
+- fetches `docker-compose.yaml` + `nats.conf` into `/opt/humanoid-robot`
+- fetches the reference env-files into `/etc/humanoid-robot/` (never
+  overwrites existing ones)
+- writes `/opt/humanoid-robot/.env` with `IMAGE_TAG`, `IMAGE_REGISTRY`,
+  and `HR_ROBOT_ADAPTER__ADAPTER_NAME=mock` — override before `up`
+- runs `docker compose pull` against `ghcr.io/amtilan/humanoid-robot-*`
+
+Pin a specific release in production:
+
+```bash
+curl -sSL … | sudo IMAGE_TAG=v1.0.0 bash
+```
+
+Switch to the real robot:
+
+```bash
+sed -i 's/^HR_ROBOT_ADAPTER__ADAPTER_NAME=.*/HR_ROBOT_ADAPTER__ADAPTER_NAME=unitree_g1_edu/' \
+    /opt/humanoid-robot/.env
+docker compose -C /opt/humanoid-robot up -d --force-recreate robot-adapter
+```
+
+Upgrade:
+
+```bash
+sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=v1.1.0/' /opt/humanoid-robot/.env
+docker compose -C /opt/humanoid-robot pull
+docker compose -C /opt/humanoid-robot up -d
+```
+
+Images (both `linux/amd64` + `linux/arm64`, published by
+`.github/workflows/publish-images.yaml` on every push to main and on
+tag pushes):
+
+- `ghcr.io/amtilan/humanoid-robot-base`
+- `ghcr.io/amtilan/humanoid-robot-dashboard`
+
+## Local compose stack
 
 ## Local compose stack
 
