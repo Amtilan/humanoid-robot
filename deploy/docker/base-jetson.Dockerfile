@@ -33,7 +33,13 @@ RUN apt-get update \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir "uv>=0.11.11"
+# dustynv/l4t-pytorch bakes Jetson wheel indexes into /etc/pip.conf
+# (jetson.webredirect.org, pypi.ngc.nvidia.com) — neither hosts `uv`
+# and jetson.webredirect.org doesn't resolve inside the CI network.
+# Bypass pip entirely and use uv's own installer, which pulls a
+# pinned arm64 binary straight from GitHub releases.
+RUN curl -LsSf https://astral.sh/uv/0.11.11/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
 
 WORKDIR /workspace
 
