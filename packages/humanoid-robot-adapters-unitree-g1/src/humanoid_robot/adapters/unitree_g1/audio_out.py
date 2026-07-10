@@ -50,8 +50,10 @@ class UnitreeG1AudioOut:
     _sdk: SdkHandles | None = None
     volume_pct: int = 100
     app_name: str = "cortex"
+    network_interface: str | None = None
     _client: Any = field(default=None)
     _initialised: bool = field(default=False)
+    _channel_initialised: bool = field(default=False)
     _stream_id: str = field(default="")
     _next_send_monotonic: float = field(default=0.0)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -71,6 +73,13 @@ class UnitreeG1AudioOut:
         if sdk is None:
             sdk = require_sdk()
             self._sdk = sdk
+        # DDS ChannelFactory is a process-global side effect; initialise it
+        # on first play() so entry-point-driven runners don't crash off-robot.
+        if not self._channel_initialised and self.network_interface and sdk.channel is not None:
+            init = getattr(sdk.channel, "ChannelFactoryInitialize", None)
+            if callable(init):
+                init(0, self.network_interface)
+            self._channel_initialised = True
         client = sdk.audio_client.AudioClient()
         _try_call(client, "SetTimeout", 10.0)
         _try_call(client, "Init")

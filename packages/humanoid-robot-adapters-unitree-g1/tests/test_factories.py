@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
-
-from humanoid_robot.adapters.unitree_g1 import UnitreeSdkNotAvailableError
 from humanoid_robot.adapters.unitree_g1.audio_in import G1AudioInConfig
+from humanoid_robot.adapters.unitree_g1.audio_out import UnitreeG1AudioOut
 from humanoid_robot.adapters.unitree_g1.factories import (
     unitree_g1_audio_in,
     unitree_g1_audio_out,
@@ -18,12 +16,17 @@ class TestFactories:
         port = unitree_g1_audio_in(input_channels=6, downmix_channel=1)
         assert port.config == G1AudioInConfig(input_channels=6, downmix_channel=1)
 
-    def test_audio_out_factory_raises_without_sdk(self) -> None:
-        # The audio-out factory triggers a real DDS init; on any machine
-        # without the vendor SDK we get UnitreeSdkNotAvailableError, which
-        # is exactly the fallback contract we want.
-        with pytest.raises(UnitreeSdkNotAvailableError):
-            unitree_g1_audio_out(network_interface="eth10")
+    def test_audio_out_factory_is_lazy(self) -> None:
+        # The factory must NOT touch the vendor SDK at construction so voice
+        # composition can pull an AudioOutPort off-robot. SDK lookup + DDS
+        # init happen on the first .play() call.
+        port = unitree_g1_audio_out(
+            network_interface="eth10", volume_pct=80, app_name="cortex-test"
+        )
+        assert isinstance(port, UnitreeG1AudioOut)
+        assert port.network_interface == "eth10"
+        assert port.volume_pct == 80
+        assert port.app_name == "cortex-test"
 
     def test_audio_in_group_registered(self) -> None:
         from importlib.metadata import entry_points

@@ -1,10 +1,13 @@
 """Entry-point factories for G1 audio ports.
 
-`UnitreeG1AudioOut` needs `SdkHandles` at construction. That is fine for
-the robot-adapter runner (which builds them once and shares them), but not
-convenient for the voice runner which resolves ports from `entry_points`
-with only a plain-kwargs config. These factories accept the CLI-friendly
-config and load the vendor SDK lazily.
+Both factories stay lazy: neither of them touches the vendor SDK at
+construction time.  The socket-backed multicast mic (`UnitreeG1AudioIn`)
+opens its socket on the first `.stream()` iteration; the DDS-backed
+speaker (`UnitreeG1AudioOut`) loads the SDK and calls
+`ChannelFactoryInitialize` on the first `.play()`.  This means voice
+composition can pull them from `entry_points` on a developer laptop
+without ``unitree_sdk2py`` installed — playback would raise the
+SDK-unavailable error, but the audio ports themselves construct fine.
 """
 
 from __future__ import annotations
@@ -14,13 +17,12 @@ from humanoid_robot.adapters.unitree_g1.audio_in import (
     UnitreeG1AudioIn,
 )
 from humanoid_robot.adapters.unitree_g1.audio_out import UnitreeG1AudioOut
-from humanoid_robot.adapters.unitree_g1.sdk import require_sdk
 
 
 def unitree_g1_audio_in(**kwargs: object) -> UnitreeG1AudioIn:
-    """`humanoid_robot.audio_in_adapters` entry-point.
+    """``humanoid_robot.audio_in_adapters`` entry-point.
 
-    Any kwargs are forwarded to `G1AudioInConfig` — no vendor SDK is
+    Any kwargs are forwarded to ``G1AudioInConfig`` — no vendor SDK is
     required (the port sits on a plain multicast socket).
     """
     config = G1AudioInConfig.model_validate(kwargs)
@@ -34,12 +36,14 @@ def unitree_g1_audio_out(
     app_name: str = "cortex",
     **_extras: object,
 ) -> UnitreeG1AudioOut:
-    """`humanoid_robot.audio_out_adapters` entry-point.
+    """``humanoid_robot.audio_out_adapters`` entry-point.
 
-    Initialises the DDS channel and loads the vendor SDK on first call so
-    the voice-runner composition can pull an `AudioOutPort` from the
-    registry without direct knowledge of `unitree_sdk2py`.
+    The vendor SDK is loaded lazily on the first ``.play()``; the DDS
+    channel factory is initialised on the same call, exactly once per
+    process, using ``network_interface`` as the bind hint.
     """
-    handles = require_sdk()
-    handles.channel.ChannelFactoryInitialize(0, network_interface)
-    return UnitreeG1AudioOut(_sdk=handles, volume_pct=volume_pct, app_name=app_name)
+    return UnitreeG1AudioOut(
+        volume_pct=volume_pct,
+        app_name=app_name,
+        network_interface=network_interface,
+    )
