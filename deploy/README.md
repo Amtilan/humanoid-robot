@@ -186,8 +186,9 @@ this overlay's `runtime: nvidia` still takes effect).
 
 The overlay also swaps voice/rag onto the arm64-only
 `humanoid-robot-base-jetson` image, which is rooted on
-`nvcr.io/nvidia/l4t-pytorch:r36.2.0-pth2.2-py3` (JetPack 6.0 GA).
-That image ships CUDA + cuDNN + torch built for Tegra, so
+`dustynv/l4t-pytorch:r36.2.0` (JetPack 6.0 GA — the community
+jetson-containers mirror on Docker Hub, no NGC auth required).
+That base ships CUDA + cuDNN + torch built for Tegra, so
 `faster-whisper`, BGE-M3 and llama.cpp all reach the iGPU when the
 overlay is active. Bump the L4T-PyTorch tag in
 `deploy/docker/base-jetson.Dockerfile` alongside any JetPack move.
@@ -269,17 +270,17 @@ Any deviation (wrong repo, wrong workflow, wrong identity, missing
 signature) causes the script to exit 4 and prints which image
 failed.
 
-**Known GHCR gotcha.** When `publish-images.yaml` first pushes a
-brand-new image, the `.sig` companion package inherits GHCR's default
-private visibility even when the image itself is public. Cosign then
-gets HTTP 404 on the signature manifest and reports "no signatures
-found." Fix once per new image tag stream:
-
-1. https://github.com/users/amtilan/packages/container/humanoid-robot-base%2Fsha256-XXXX.sig
-2. Package settings → Change visibility → Public.
-3. Repeat for `humanoid-robot-dashboard` and `humanoid-robot-base-jetson`.
-
-(Automating this via a `gh api` step lands in the next round.)
+**`.sig` visibility (auto-fixed).** GHCR gives freshly-created `.sig`
+companion packages the user's default visibility (usually private)
+even when the main image is public — cosign then 404s on the sig
+manifest and the fail-closed installer refuses to pull. The publish
+workflow now runs a `gh api PATCH` step right after `cosign sign`
+that flips the sig package to public, so verification works
+end-to-end from the first tag onward. The step is best-effort: on
+first-ever publish the package indexer can lag the API call, so if
+you see a `::warning::visibility flip failed` line, flip it manually
+at `https://github.com/users/<owner>/packages/container/<name>%2Fsha256-XXXX.sig/settings`
+or re-run the workflow.
 
 ### Cutting a release
 

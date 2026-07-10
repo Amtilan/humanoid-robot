@@ -1,15 +1,22 @@
 # Jetson-native base image.
 #
-# Same workspace layout as base.Dockerfile, but rooted on
-# nvcr.io/nvidia/l4t-pytorch so faster-whisper / BGE-M3 / llama.cpp
-# can actually reach the Tegra iGPU at runtime.  ARM64-only — L4T
+# Same workspace layout as base.Dockerfile, but rooted on a
+# CUDA-enabled L4T-PyTorch image so faster-whisper / BGE-M3 /
+# llama.cpp reach the Tegra iGPU at runtime.  ARM64-only — L4T
 # containers don't exist for amd64.  The x86 flow keeps using the
 # ordinary CPU-only base image.
+#
+# Base source: dustynv/l4t-pytorch is the community mirror of the
+# jetson-containers project maintained by NVIDIA's Dusty Franklin.
+# We use it instead of nvcr.io/nvidia/l4t-pytorch because Docker Hub
+# is public with no NGC auth and the tag stream is stable; the
+# nvcr.io tags rename between JetPack releases and needed a rebuild
+# every time (r36.2.0-pth2.2-py3 was pulled after we pinned it).
 #
 # Pin: r36.2.0 corresponds to JetPack 6.0 GA. Bump both the tag here
 # and any JetPack version references in deploy/README.md together.
 
-FROM nvcr.io/nvidia/l4t-pytorch:r36.2.0-pth2.2-py3 AS base
+FROM dustynv/l4t-pytorch:r36.2.0 AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
