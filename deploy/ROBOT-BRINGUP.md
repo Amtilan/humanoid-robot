@@ -72,7 +72,7 @@ Recommendation: implement both; default to (A) for convenience, document
 
 ## 3. The full проброс — phased
 
-### Phase A — infra bring-up (mock adapter, no motion) ✅ safe to run now
+### Phase A — infra bring-up (mock adapter, no motion) ✅ DONE 2026-07-10
 1. `install-on-robot.sh` bootstraps compose plugin + (opt) `--fix-egress`.
 2. Pull `humanoid-robot-base` + `dashboard` (arm64, verified pullable).
 3. `docker compose up -d` with `HR_ROBOT_ADAPTER__ADAPTER_NAME=mock`.
@@ -83,6 +83,29 @@ Recommendation: implement both; default to (A) for convenience, document
 
 **Exit criteria:** dashboard reachable on the robot, health ready, mock
 telemetry flowing. Zero motor commands.
+
+**Executed on the real G1 (2026-07-10)** — one `install-on-robot.sh
+--fix-egress` run:
+- installer bootstrapped the missing compose v2 plugin + cosign,
+  forced a reversible wlan0 default (eth10 was shadowing egress),
+  pulled all images, then reverted the route;
+- **fail-closed cosign verify passed** on both images against our
+  workflow OIDC identity — real supply-chain check, live;
+- Jetson auto-detected → GPU overlay enabled in `COMPOSE_FILE`;
+- `docker compose up -d` → nats healthy → core healthy → adapter
+  started (R9 boot-ordering fix confirmed on hardware);
+- `verify-install.sh` → **all 6 core checks PASS** (nats.container,
+  cortex-core.ready http=200, robot-adapter.manifest adapter=mock,
+  diagnostics.ticker, safety.gate estop_engaged=True, dashboard.spa);
+- dashboard http=200 + API ready http=200 on the robot;
+- **DDS control plane untouched** — eth10 (192.168.123.164/24) intact,
+  default routes back to the original two, no motor traffic.
+
+Gaps this surfaced (all fixed in the installer): compose plugin missing
+on JetPack, cosign missing, egress shadowed by the eth10 DDS route
+(needs `--fix-egress`), and the DNS fast-path false-positive (resolver
+fans queries across both links) — now forces the route via a proven
+online interface.
 
 ### Phase B — real Unitree adapter (the motion blocker)
 1. Package `unitree_sdk2py` + `cyclonedds` into an **arm64 adapter image
@@ -148,9 +171,13 @@ NATS. Only worth it once B+C work on CPU.
 
 ## 5. Immediate next actions
 
-- [ ] `install-on-robot.sh`: bootstrap compose plugin if missing.
-- [ ] `install-on-robot.sh`: `--fix-egress` (reversible route) + document (B) side-load.
-- [ ] `deploy/scripts/sideload.sh` for fully-offline units.
-- [ ] Run **Phase A** on the robot (mock, no motion) and capture `verify-install.sh` output.
+- [x] `install-on-robot.sh`: bootstrap compose plugin if missing.
+- [x] `install-on-robot.sh`: `--fix-egress` (reversible route).
+- [x] Run **Phase A** on the robot (mock, no motion) — all checks PASS.
+- [ ] `deploy/scripts/sideload.sh` for fully-offline units (document (B)).
 - [ ] Build the arm64 adapter image variant with `unitree_sdk2py` + `cyclonedds` (Phase B step 1).
 - [ ] Hardware: attach USB audio for Phase C.
+
+The Phase A stack is left **running** on the robot (`restart:
+unless-stopped`, mock adapter, bound to 127.0.0.1). Tear down with
+`cd /opt/humanoid-robot && sudo docker compose down`.
