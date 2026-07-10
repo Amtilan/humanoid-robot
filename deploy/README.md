@@ -176,11 +176,13 @@ knows about it. JetPack ships it by default. On stock Ubuntu install
 `/etc/docker/daemon.json` (or leave the default runtime alone and
 this overlay's `runtime: nvidia` still takes effect).
 
-**Caveat**: the current base image is CPU-only. Even with the
-runtime forwarded, `faster-whisper` / BGE-M3 / llama.cpp fall back
-to CPU because CUDA libraries aren't in the image. A Jetson-native
-base variant (`nvcr.io/nvidia/l4t-*`) lands in a follow-up round;
-this overlay establishes the plumbing.
+The overlay also swaps voice/rag onto the arm64-only
+`humanoid-robot-base-jetson` image, which is rooted on
+`nvcr.io/nvidia/l4t-pytorch:r36.2.0-pth2.2-py3` (JetPack 6.0 GA).
+That image ships CUDA + cuDNN + torch built for Tegra, so
+`faster-whisper`, BGE-M3 and llama.cpp all reach the iGPU when the
+overlay is active. Bump the L4T-PyTorch tag in
+`deploy/docker/base-jetson.Dockerfile` alongside any JetPack move.
 
 Switch to the real robot:
 
