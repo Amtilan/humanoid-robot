@@ -12,6 +12,9 @@ from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
+from pydantic import BaseModel, ValidationError
+
+from humanoid_robot.domain.robot import MoveCommand, StopCommand
 from humanoid_robot.ports import SafetyDecision, SafetyPolicyPort, SafetyRequest
 from humanoid_robot.safety.estop import EStopState
 
@@ -72,6 +75,49 @@ class RateLimitPolicy:
             )
         window.append(now)
         return SafetyDecision(verdict="allow", reason="within rate limit")
+
+
+DEFAULT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
+    "locomotion.move": MoveCommand,
+    "locomotion.stop": StopCommand,
+}
+
+
+@dataclass(slots=True)
+class PayloadSchemaPolicy:
+    """Denies commands whose payload does not match the capability schema.
+
+    ``schemas`` maps a capability to a pydantic model.  Capabilities not
+    present in the map pass through — other policies (allow-list,
+    velocity, etc.) still apply.  Validation errors are collapsed into
+    the first ``msg`` for a compact human-readable reason; the full
+    error is logged by the caller if needed.
+    """
+
+    schemas: dict[str, type[BaseModel]] = field(
+        default_factory=lambda: dict(DEFAULT_PAYLOAD_SCHEMAS)
+    )
+
+    async def evaluate(self, request: SafetyRequest) -> SafetyDecision:
+        schema = self.schemas.get(request.capability)
+        if schema is None:
+            return SafetyDecision(
+                verdict="allow",
+                reason=f"no schema registered for {request.capability!r}",
+            )
+        try:
+            schema.model_validate(request.payload)
+        except ValidationError as exc:
+            first = exc.errors()[0] if exc.errors() else {}
+            loc = ".".join(str(part) for part in first.get("loc", ())) or "<root>"
+            msg = str(first.get("msg", "invalid payload"))
+            return SafetyDecision(
+                verdict="deny",
+                reason=f"schema violation @ {loc}: {msg}"[:200],
+            )
+        return SafetyDecision(
+            verdict="allow", reason=f"payload matches {request.capability} schema"
+        )
 
 
 @dataclass(slots=True)
