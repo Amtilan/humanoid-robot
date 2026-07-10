@@ -1,0 +1,15 @@
+# Grafana dashboard provider — reads every .json under this directory
+# tree and installs them under the "humanoid-robot" folder.
+
+apiVersion: 1
+
+providers:
+  - name: humanoid-robot
+    orgId: 1
+    folder: humanoid-robot
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

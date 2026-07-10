@@ -1,0 +1,27 @@
+# Prometheus scrape config for the humanoid-robot compose stack.
+# Kept intentionally small — one job per service. Extend as more
+# services expose /metrics.
+
+global:
+  scrape_interval: 5s
+  scrape_timeout: 4s
+  external_labels:
+    stack: humanoid-robot
+
+scrape_configs:
+  - job_name: cortex-core
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["core:8080"]
+
+  - job_name: nats
+    metrics_path: /varz
+    scheme: http
+    static_configs:
+      - targets: ["nats:8222"]
+
+  - job_name: qdrant
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets: ["qdrant:6333"]

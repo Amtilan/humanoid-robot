@@ -67,6 +67,25 @@ Both services mount `/etc/humanoid-robot/{voice,rag}.yaml` from the
 host so you can iterate on the stack config without rebuilding the
 image.
 
+### Metrics + Grafana (opt-in)
+
+```bash
+cd /opt/humanoid-robot
+docker compose --profile metrics up -d
+```
+
+- Prometheus  → http://localhost:9090/ — scrapes cortex-core `/metrics`,
+  NATS `/varz`, and Qdrant `/metrics` every 5 s (14-day retention).
+- Grafana     → http://localhost:3000/ — anonymous viewer role is on
+  so you can drop into the dashboard without logging in;
+  admin/admin gets you edit mode. The "humanoid-robot platform"
+  dashboard is auto-provisioned from
+  `/etc/humanoid-robot/observability/grafana/dashboards/`. Drop your
+  own `.json` next to it and Grafana picks it up within 30 s.
+
+Ports 9090/3000 are bound to `127.0.0.1` only.  Front-face them
+with nginx / Cloudflare Tunnel / your VPN of choice when exposing.
+
 Switch to the real robot:
 
 ```bash

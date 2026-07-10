@@ -66,6 +66,20 @@ main() {
         fi
     done
 
+    # Observability provisioning — Prometheus scrape + Grafana defaults
+    # get bind-mounted from /etc/humanoid-robot/observability into the
+    # metrics containers, so ship them alongside the service configs.
+    install -d -m 0755 "${CONFIG_DIR}/observability/grafana/dashboards"
+    install -d -m 0755 "${CONFIG_DIR}/observability/grafana/datasources"
+    fetch deploy/observability/prometheus.yml \
+        "${CONFIG_DIR}/observability/prometheus.yml"
+    fetch deploy/observability/grafana/datasources/prometheus.yaml \
+        "${CONFIG_DIR}/observability/grafana/datasources/prometheus.yaml"
+    fetch deploy/observability/grafana/dashboards/provider.yaml \
+        "${CONFIG_DIR}/observability/grafana/dashboards/provider.yaml"
+    fetch deploy/observability/grafana/dashboards/platform.json \
+        "${CONFIG_DIR}/observability/grafana/dashboards/platform.json"
+
     for env in cortex-core cortex-robot-adapter cortex-voice cortex-rag; do
         local src="deploy/config/${env}.env.example"
         local dst="${CONFIG_DIR}/${env}.env"
@@ -116,6 +130,9 @@ Upgrade:
 Enable voice + RAG (~9.5 GB of models pulled from Hugging Face):
   sudo bash ${INSTALL_DIR}/fetch-models.sh
   docker compose --profile voice --profile rag up -d
+
+Enable observability (Prometheus + Grafana on 127.0.0.1:{9090,3000}):
+  docker compose --profile metrics up -d
 EOF
 }
 
