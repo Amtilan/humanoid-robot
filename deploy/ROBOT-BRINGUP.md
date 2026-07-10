@@ -193,6 +193,34 @@ Follow-ups this surfaced:
   action IDs from `GetActionList`). All are arm motions — bigger than a
   head tilt, so they need clear space + the operator on the e-stop.
 
+### Phase B3b — real arm gesture (2026-07-10)
+
+Second first-motion attempt: `arms.gesture "release arm"`, robot secured
++ e-stop in hand. **Platform pipeline proven again, fully**: audit trail
+shows `estop.released → command.requested → command.forwarded (gate
+allowed) → command.result → estop.engaged`. The command reached the
+vendor `G1ArmActionClient.ExecuteAction(99)`.
+
+**But the arm did not move**: `ExecuteAction` returned **7404** →
+`hardware_error`. Root cause (confirmed by probing): the robot's
+**FSM is (0,0)** — an idle / zero-torque state. `GetActionList` works
+(the arm service answers queries and lists the real actions —
+release_arm=99, wave_above_head=26, shake_hand=27, …) but `ExecuteAction`
+is rejected because the G1 isn't in an operational control mode.
+
+**What actual motion needs:** bring the G1 into an operational FSM via
+`LocoClient` (e.g. `BalanceStand` / the operation-control FSM). That
+means the robot **stands up and balances** — a much larger, higher-risk
+step than a gesture: it must be free-standing (NOT on a rigid stand) and
+bearing its own weight, with the operator fully set for a standing
+sequence. This is Unitree operational procedure, not a platform gap —
+our stack does everything correctly up to the vendor call.
+
+**Bottom line for Phase B:** the command + safety + telemetry platform is
+proven end-to-end on the real G1. Real actuation is gated behind the
+robot's own operational-state requirements (stand/balance FSM), which is
+a deliberate, separate bring-up.
+
 ### Phase B — real Unitree adapter (the motion blocker)
 1. Package `unitree_sdk2py` + `cyclonedds` into an **arm64 adapter image
    variant** (they're the missing runtime deps). Pin against the C++ SDK
