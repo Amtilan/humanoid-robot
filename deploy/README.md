@@ -231,26 +231,55 @@ Every publish runs three follow-up matrix jobs:
   job runs immediately after to confirm the signature landed. See
   "Signature verification" below for the operator-side check.
 
-### Signature verification
+### Signature verification (fail-closed)
 
-`install-on-robot.sh` verifies each image's signature before pulling
-if `cosign` is installed. Install cosign
+`install-on-robot.sh` verifies every image's signature against this
+repo's `publish-images.yaml` workflow identity **before** running
+`docker compose pull`. If verification fails — or `cosign` is missing —
+the installer aborts, so an unsigned or hijacked tag never reaches the
+local image store.
+
+Install cosign
 ([docs.sigstore.dev](https://docs.sigstore.dev/cosign/installation/))
-before running the installer; without it the installer prints a
-"skipping verification" note and continues.
+before running the installer. The installer prints the exact `curl`
+lines it needs (linux-amd64 and linux-arm64) if it can't find the
+binary.
 
-Manual verification of any specific image:
+Escape hatch — dev builds that were never pushed to GHCR:
 
 ```bash
-cosign verify ghcr.io/amtilan/humanoid-robot-base:v1.0.0 \
-    --certificate-identity-regexp \
-        '^https://github.com/Amtilan/humanoid-robot/.github/workflows/publish-images.yaml@' \
-    --certificate-oidc-issuer https://token.actions.githubusercontent.com
+curl -sSL .../install-on-robot.sh | sudo bash -s -- --skip-verify
+# or set HR_INSTALL_SKIP_VERIFY=1
 ```
 
-Successful output ends with a JSON block describing the certificate
-chain that vouches for the image. Any deviation (wrong repo, wrong
-workflow, wrong identity) causes cosign to exit non-zero.
+Manual re-verification at any time (also runs before upgrades):
+
+```bash
+IMAGE_TAG=v1.0.0 bash /opt/humanoid-robot/verify-images.sh
+```
+
+`verify-images.sh` accepts explicit image refs for one-off checks:
+
+```bash
+bash /opt/humanoid-robot/verify-images.sh \
+    ghcr.io/amtilan/humanoid-robot-base:v1.0.0
+```
+
+Any deviation (wrong repo, wrong workflow, wrong identity, missing
+signature) causes the script to exit 4 and prints which image
+failed.
+
+**Known GHCR gotcha.** When `publish-images.yaml` first pushes a
+brand-new image, the `.sig` companion package inherits GHCR's default
+private visibility even when the image itself is public. Cosign then
+gets HTTP 404 on the signature manifest and reports "no signatures
+found." Fix once per new image tag stream:
+
+1. https://github.com/users/amtilan/packages/container/humanoid-robot-base%2Fsha256-XXXX.sig
+2. Package settings → Change visibility → Public.
+3. Repeat for `humanoid-robot-dashboard` and `humanoid-robot-base-jetson`.
+
+(Automating this via a `gh api` step lands in the next round.)
 
 ### Cutting a release
 

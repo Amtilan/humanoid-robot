@@ -21,6 +21,16 @@ CONFIG_DIR="${CONFIG_DIR:-/etc/humanoid-robot}"
 REPO="Amtilan/humanoid-robot"
 RAW_BASE="https://raw.githubusercontent.com/${REPO}/${RELEASE_REF}"
 
+# --skip-verify (or HR_INSTALL_SKIP_VERIFY=1) bypasses the fail-closed
+# cosign check. Use ONLY for dev builds that were never pushed to GHCR.
+SKIP_VERIFY="${HR_INSTALL_SKIP_VERIFY:-0}"
+for arg in "$@"; do
+    case "${arg}" in
+        --skip-verify) SKIP_VERIFY=1 ;;
+        *) echo "unknown argument: ${arg}" >&2; exit 2 ;;
+    esac
+done
+
 need_root() {
     if [[ $EUID -ne 0 ]]; then
         echo "must run as root (use sudo)" >&2
@@ -66,6 +76,8 @@ main() {
     chmod +x "${INSTALL_DIR}/restore.sh"
     fetch deploy/scripts/verify-install.sh "${INSTALL_DIR}/verify-install.sh"
     chmod +x "${INSTALL_DIR}/verify-install.sh"
+    fetch deploy/scripts/verify-images.sh "${INSTALL_DIR}/verify-images.sh"
+    chmod +x "${INSTALL_DIR}/verify-images.sh"
     install -d -m 0750 /var/backups/humanoid-robot
     for cfg in voice rag; do
         local dst="${CONFIG_DIR}/${cfg}.yaml"
@@ -122,25 +134,31 @@ COMPOSE_FILE=${compose_files}
 EOF
     chmod 0640 "${INSTALL_DIR}/.env"
 
-    if command -v cosign >/dev/null 2>&1; then
+    if [[ "${SKIP_VERIFY}" == "1" ]]; then
         echo
-        echo "Verifying image signatures against publish-images.yaml OIDC identity…"
-        for name in humanoid-robot-base humanoid-robot-dashboard; do
-            local ref="ghcr.io/amtilan/${name}:${IMAGE_TAG}"
-            if ! cosign verify "${ref}" \
-                --certificate-identity-regexp "^https://github.com/Amtilan/humanoid-robot/.github/workflows/publish-images.yaml@" \
-                --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-                > /dev/null 2>&1; then
-                echo "  WARNING: signature verification failed for ${ref}" >&2
-                echo "  proceed only if you trust the tag was published from this repo" >&2
-            else
-                echo "  ${ref} — verified"
-            fi
-        done
+        echo "WARNING: --skip-verify passed — image signatures are NOT being checked." >&2
+        echo "Only appropriate for local dev builds that were never published to GHCR." >&2
     else
         echo
-        echo "cosign not installed — skipping signature verification."
-        echo "Install cosign (https://docs.sigstore.dev/cosign/installation/) to enable."
+        # Fail-closed. If verify-images.sh exits non-zero we abort BEFORE
+        # `docker compose pull` so unsigned/tampered images never land in
+        # the local image store.
+        local rc=0
+        IMAGE_TAG="${IMAGE_TAG}" IMAGE_REGISTRY=ghcr.io IMAGE_OWNER=amtilan \
+            bash "${INSTALL_DIR}/verify-images.sh" || rc=$?
+        case "${rc}" in
+            0) ;;
+            3)
+                echo "cosign is required for a hardened install." >&2
+                echo "Install it (URLs above) and re-run this script, or pass" >&2
+                echo "--skip-verify if you accept the supply-chain risk." >&2
+                exit 3
+                ;;
+            *)
+                echo "Refusing to pull unverified images. Aborting." >&2
+                exit "${rc}"
+                ;;
+        esac
     fi
 
     echo
@@ -170,7 +188,11 @@ Switch adapter (e.g. unitree_g1_edu):
 
 Upgrade:
   edit ${INSTALL_DIR}/.env and set IMAGE_TAG=vX.Y.Z
+  IMAGE_TAG=vX.Y.Z bash ${INSTALL_DIR}/verify-images.sh
   docker compose pull && docker compose up -d
+
+Re-verify signatures at any time:
+  bash ${INSTALL_DIR}/verify-images.sh
 
 Enable voice + RAG (~9.5 GB of models pulled from Hugging Face):
   sudo bash ${INSTALL_DIR}/fetch-models.sh
