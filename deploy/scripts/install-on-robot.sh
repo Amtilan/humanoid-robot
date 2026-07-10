@@ -61,6 +61,8 @@ main() {
     chmod +x "${INSTALL_DIR}/backup.sh"
     fetch deploy/scripts/restore.sh       "${INSTALL_DIR}/restore.sh"
     chmod +x "${INSTALL_DIR}/restore.sh"
+    fetch deploy/scripts/verify-install.sh "${INSTALL_DIR}/verify-install.sh"
+    chmod +x "${INSTALL_DIR}/verify-install.sh"
     install -d -m 0750 /var/backups/humanoid-robot
     for cfg in voice rag; do
         local dst="${CONFIG_DIR}/${cfg}.yaml"
@@ -135,6 +137,7 @@ Install complete. To start the platform:
 
   cd ${INSTALL_DIR}
   docker compose up -d
+  bash ${INSTALL_DIR}/verify-install.sh   # smoke check the running stack
 
 Dashboard: http://127.0.0.1:8081/
 API:       http://127.0.0.1:8080/

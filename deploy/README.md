@@ -34,6 +34,21 @@ Pin a specific release in production:
 curl -sSL … | sudo IMAGE_TAG=v1.0.0 bash
 ```
 
+### Verifying the install
+
+`install-on-robot.sh` copies `verify-install.sh` alongside the compose
+file. Run it after `docker compose up` for a robot-side smoke check —
+same probes the CI `compose-smoke` workflow runs, but locally:
+
+```bash
+bash /opt/humanoid-robot/verify-install.sh
+# extend the checks for opt-in profiles:
+bash /opt/humanoid-robot/verify-install.sh --with voice --with rag --with metrics
+```
+
+Every check reports `PASS` / `FAIL` / `skip` in a summary table.
+Exit code is 0 iff every non-skip check passed.
+
 ### Voice + RAG (opt-in, ~9.5 GB of models)
 
 The base install runs cortex-core + robot-adapter + dashboard only —
