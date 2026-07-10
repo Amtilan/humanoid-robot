@@ -60,6 +60,8 @@ class SafetySettings(BaseModel):
     command_timeout_s: float = 3.0
     command_check_interval_s: float = 0.5
     audit_db_path: Path = Path("var/safety_audit.sqlite")
+    max_linear_speed_mps: float = 0.5
+    max_angular_rate_rps: float = 1.0
 
     @field_validator("audit_db_path", mode="before")
     @classmethod

@@ -76,6 +76,12 @@ export function RobotPage() {
             disabled={command.isPending}
           />
           <CmdButton
+            label="⚠ 2 m/s (should deny)"
+            onClick={() => sendMove(2.0, 0, 500)}
+            disabled={command.isPending}
+            variant="warning"
+          />
+          <CmdButton
             label="■ stop"
             onClick={() =>
               command.mutate({ capability: "locomotion.stop", payload: {} })
@@ -186,14 +192,16 @@ function CmdButton({
   label: string;
   onClick: () => void;
   disabled: boolean;
-  variant?: "default" | "danger";
+  variant?: "default" | "danger" | "warning";
 }) {
   const base =
     "rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-40";
   const style =
     variant === "danger"
       ? "border-red-500/50 bg-red-500/10 text-red-300 hover:bg-red-500/20"
-      : "border-border bg-background/60 hover:bg-accent hover:text-accent-foreground";
+      : variant === "warning"
+        ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-300 hover:bg-yellow-500/20"
+        : "border-border bg-background/60 hover:bg-accent hover:text-accent-foreground";
   return (
     <button type="button" onClick={onClick} disabled={disabled} className={`${base} ${style}`}>
       {label}

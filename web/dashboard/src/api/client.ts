@@ -261,4 +261,6 @@ export interface SafetyStatus {
   command_timeout_s: number;
   pending_command_count: number;
   pending_command_ids: string[];
+  max_linear_speed_mps: number;
+  max_angular_rate_rps: number;
 }

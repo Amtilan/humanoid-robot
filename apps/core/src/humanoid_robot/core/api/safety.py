@@ -29,6 +29,8 @@ class SafetyStatus(BaseModel):
     command_timeout_s: float
     pending_command_count: int
     pending_command_ids: list[str]
+    max_linear_speed_mps: float
+    max_angular_rate_rps: float
 
 
 class EStopRequest(BaseModel):
@@ -72,6 +74,8 @@ async def status(request: Request) -> SafetyStatus:
         command_timeout_s=settings.command_timeout_s,
         pending_command_count=pending_count,
         pending_command_ids=pending_ids,
+        max_linear_speed_mps=settings.max_linear_speed_mps,
+        max_angular_rate_rps=settings.max_angular_rate_rps,
     )
 
 

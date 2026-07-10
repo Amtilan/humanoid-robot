@@ -33,6 +33,7 @@ from humanoid_robot.safety import (
     SafetyAuditRecorder,
     SafetyGate,
     SafetyWatchdog,
+    VelocityLimitPolicy,
 )
 
 
@@ -92,6 +93,10 @@ class AppContainer:
         safety_policy = ChainPolicy(
             [
                 KnownCapabilitiesPolicy(allowed=frozenset(settings.safety.allowed_capabilities)),
+                VelocityLimitPolicy(
+                    max_linear_speed_mps=settings.safety.max_linear_speed_mps,
+                    max_angular_rate_rps=settings.safety.max_angular_rate_rps,
+                ),
                 RateLimitPolicy(
                     window_s=settings.safety.rate_limit_window_s,
                     max_events=settings.safety.rate_limit_max_events,

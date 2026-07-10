@@ -8,6 +8,7 @@ from humanoid_robot.safety.policies import (
     EStopPolicy,
     KnownCapabilitiesPolicy,
     RateLimitPolicy,
+    VelocityLimitPolicy,
 )
 from humanoid_robot.safety.reconciler import CommandReconciler
 from humanoid_robot.safety.watchdog import SafetyWatchdog
@@ -23,4 +24,5 @@ __all__ = [
     "SafetyAuditRecorder",
     "SafetyGate",
     "SafetyWatchdog",
+    "VelocityLimitPolicy",
 ]

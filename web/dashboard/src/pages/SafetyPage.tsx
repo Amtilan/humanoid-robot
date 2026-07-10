@@ -199,8 +199,14 @@ export function SafetyPage() {
               {status.data.rate_limit_window_s.toFixed(1)} s
             </div>
           </Card>
-          <Card title="Denial policy">
-            <div className="text-sm">First deny wins. Empty policy chain denies.</div>
+          <Card title="Velocity envelope">
+            <div className="text-sm">
+              ≤ {status.data.max_linear_speed_mps.toFixed(2)} m/s ·{" "}
+              {status.data.max_angular_rate_rps.toFixed(2)} rad/s
+            </div>
+            <p className="pt-1 text-xs text-muted-foreground">
+              L2 norm of linear_x + linear_y is compared.
+            </p>
           </Card>
         </div>
       )}

@@ -6,6 +6,7 @@ the first `deny` wins; `allow` requires all links to allow.
 
 from __future__ import annotations
 
+import math
 import time
 from collections import deque
 from collections.abc import Iterable
@@ -71,6 +72,64 @@ class RateLimitPolicy:
             )
         window.append(now)
         return SafetyDecision(verdict="allow", reason="within rate limit")
+
+
+@dataclass(slots=True)
+class VelocityLimitPolicy:
+    """Denies `locomotion.move` commands that exceed configured envelope.
+
+    Any capability other than ``locomotion.move`` allows through so
+    higher-capability envelopes (arm gestures, head pose) are governed
+    by their own policies.  Combined linear speed uses the L2 norm of
+    ``linear_x_mps`` + ``linear_y_mps`` to catch diagonal blow-outs.
+    """
+
+    max_linear_speed_mps: float
+    max_angular_rate_rps: float
+    capability: str = "locomotion.move"
+
+    async def evaluate(self, request: SafetyRequest) -> SafetyDecision:
+        if request.capability != self.capability:
+            return SafetyDecision(verdict="allow", reason="not a locomotion command")
+        try:
+            linear_x = _as_float(request.payload.get("linear_x_mps", 0.0))
+            linear_y = _as_float(request.payload.get("linear_y_mps", 0.0))
+            angular_z = _as_float(request.payload.get("angular_z_rps", 0.0))
+        except (TypeError, ValueError):
+            return SafetyDecision(
+                verdict="deny",
+                reason="locomotion.move payload has non-numeric velocity fields",
+            )
+        speed = math.hypot(linear_x, linear_y)
+        if speed > self.max_linear_speed_mps:
+            return SafetyDecision(
+                verdict="deny",
+                reason=(
+                    f"linear speed {speed:.2f} m/s exceeds "
+                    f"limit {self.max_linear_speed_mps:.2f} m/s"
+                ),
+            )
+        if abs(angular_z) > self.max_angular_rate_rps:
+            return SafetyDecision(
+                verdict="deny",
+                reason=(
+                    f"angular rate {abs(angular_z):.2f} rad/s exceeds "
+                    f"limit {self.max_angular_rate_rps:.2f} rad/s"
+                ),
+            )
+        return SafetyDecision(verdict="allow", reason="within velocity envelope")
+
+
+def _as_float(value: object) -> float:
+    if isinstance(value, bool):
+        msg = "bool is not a valid velocity value"
+        raise TypeError(msg)
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        return float(value)
+    msg = f"cannot coerce {type(value).__name__} to float"
+    raise TypeError(msg)
 
 
 @dataclass(slots=True)
