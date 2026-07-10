@@ -102,20 +102,26 @@ bootstrap_cosign() {
     chmod +x "${dest}"
 }
 
-# True iff we can reach GHCR at all. Deliberately does NOT use curl -f:
-# https://ghcr.io/v2/ answers 401 (auth required) when reachable, and
-# -f would mistake that for failure. Any HTTP status back (code != 000)
-# means the TCP+TLS path is up; 000 means no route / no DNS / timeout.
+# True iff we can actually reach github.com (the host the very next
+# steps download from). Probes github.com — NOT ghcr.io — because an
+# earlier manual lookup can leave ghcr.io in the resolver cache, making
+# a ghcr.io probe pass while real DNS is still broken. Deliberately does
+# NOT use curl -f: github answers 200 but /v2/-style auth endpoints 401,
+# and any HTTP status back (code != 000) proves TCP+TLS+DNS are up; 000
+# means no route / no DNS / timeout.
 _online() {
+    # Drop any stale resolver cache so the probe reflects the live path,
+    # not a name we resolved by hand earlier.
+    resolvectl flush-caches >/dev/null 2>&1 || true
     local code
     code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
-        https://ghcr.io/v2/ 2>/dev/null || echo 000)
+        https://github.com 2>/dev/null || echo 000)
     [[ "${code}" != "000" ]]
 }
 
-# If the current default route can't actually reach GHCR, look for
-# another default-route interface that CAN and add a low-metric default
-# via it. Records the exact route in _EGRESS_ROUTE for revert_egress.
+# If the current default route can't actually reach the internet, look
+# for another default-route interface that CAN and add a low-metric
+# default via it. Records the route in _EGRESS_ROUTE for revert_egress.
 fix_egress() {
     if _online; then
         echo "egress already works — no route change needed."
