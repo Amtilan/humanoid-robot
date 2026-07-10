@@ -78,8 +78,13 @@ main() {
     # metrics containers, so ship them alongside the service configs.
     install -d -m 0755 "${CONFIG_DIR}/observability/grafana/dashboards"
     install -d -m 0755 "${CONFIG_DIR}/observability/grafana/datasources"
+    install -d -m 0755 "${CONFIG_DIR}/observability/rules"
     fetch deploy/observability/prometheus.yml \
         "${CONFIG_DIR}/observability/prometheus.yml"
+    fetch deploy/observability/alertmanager.yml \
+        "${CONFIG_DIR}/observability/alertmanager.yml"
+    fetch deploy/observability/rules/humanoid-robot.yml \
+        "${CONFIG_DIR}/observability/rules/humanoid-robot.yml"
     fetch deploy/observability/grafana/datasources/prometheus.yaml \
         "${CONFIG_DIR}/observability/grafana/datasources/prometheus.yaml"
     fetch deploy/observability/grafana/dashboards/provider.yaml \

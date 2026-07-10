@@ -150,11 +150,26 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=14d"
+      - "--web.enable-lifecycle"
     volumes:
       - /etc/humanoid-robot/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /etc/humanoid-robot/observability/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    restart: unless-stopped
+    profiles: ["metrics"]
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    volumes:
+      - /etc/humanoid-robot/observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
 
   grafana:
     image: grafana/grafana:11.2.0
@@ -182,4 +197,5 @@ volumes:
   qdrant-data:
   rag-state:
   prometheus-data:
+  alertmanager-data:
   grafana-data:

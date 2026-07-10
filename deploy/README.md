@@ -112,7 +112,7 @@ humanoid-robot-<UTC-ISO8601>.tar.gz
 Retention keeps the newest `BACKUP_RETAIN` (default 14) tarballs and
 prunes older ones. Set `BACKUP_RETAIN=0` to disable pruning.
 
-### Metrics + Grafana (opt-in)
+### Metrics + Grafana + alerts (opt-in)
 
 ```bash
 cd /opt/humanoid-robot
@@ -121,6 +121,16 @@ docker compose --profile metrics up -d
 
 - Prometheus  → http://localhost:9090/ — scrapes cortex-core `/metrics`,
   NATS `/varz`, and Qdrant `/metrics` every 5 s (14-day retention).
+  Evaluates alert rules from
+  `/etc/humanoid-robot/observability/rules/*.yml` and forwards firing
+  alerts to Alertmanager. `--web.enable-lifecycle` is on so
+  `curl -X POST http://localhost:9090/-/reload` picks up rule edits
+  without restarting the container.
+- Alertmanager → http://localhost:9093/ — routes alerts. Ships with a
+  no-op webhook receiver; wire in your own Slack / Discord / ntfy /
+  email by editing `alertmanager.yml`. Critical alerts repeat every
+  5 min, warnings every 30 min. Inhibit rules stop CPU/memory alerts
+  when the whole process is down.
 - Grafana     → http://localhost:3000/ — anonymous viewer role is on
   so you can drop into the dashboard without logging in;
   admin/admin gets you edit mode. The "humanoid-robot platform"
@@ -128,8 +138,15 @@ docker compose --profile metrics up -d
   `/etc/humanoid-robot/observability/grafana/dashboards/`. Drop your
   own `.json` next to it and Grafana picks it up within 30 s.
 
-Ports 9090/3000 are bound to `127.0.0.1` only.  Front-face them
+Ports 9090/3000/9093 are bound to `127.0.0.1` only.  Front-face them
 with nginx / Cloudflare Tunnel / your VPN of choice when exposing.
+
+Bundled alerts (see `deploy/observability/rules/humanoid-robot.yml`):
+
+- `CortexCoreDown` / `NatsDown` (critical): 30 s downtime.
+- `QdrantDown` (warning): 60 s downtime.
+- `CortexCoreHighCPU` (warning): rate ≥ 90 % sustained for 5 min.
+- `CortexCoreMemoryHigh` (warning): RSS > 1 GiB for 10 min.
 
 Switch to the real robot:
 

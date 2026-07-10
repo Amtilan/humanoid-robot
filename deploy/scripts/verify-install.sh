@@ -21,6 +21,7 @@ DASHBOARD_URL="${DASHBOARD_URL:-http://127.0.0.1:8081}"
 QDRANT_URL="${QDRANT_URL:-http://127.0.0.1:6333}"
 PROM_URL="${PROM_URL:-http://127.0.0.1:9090}"
 GRAFANA_URL="${GRAFANA_URL:-http://127.0.0.1:3000}"
+ALERTMANAGER_URL="${ALERTMANAGER_URL:-http://127.0.0.1:9093}"
 
 CORE_READY_TIMEOUT_S="${CORE_READY_TIMEOUT_S:-60}"
 MANIFEST_TIMEOUT_S="${MANIFEST_TIMEOUT_S:-30}"
@@ -188,8 +189,17 @@ check_qdrant() {
 check_prometheus() {
     if (( CHECKS_METRICS )); then
         probe_http_ok prometheus.up "${PROM_URL}/-/ready"
+        # Rule file loaded and parsed?
+        local rules
+        rules=$(curl -sf "${PROM_URL}/api/v1/rules" 2>/dev/null || true)
+        if echo "${rules}" | grep -q '"CortexCoreDown"'; then
+            record prometheus.rules ok "CortexCoreDown rule active"
+        else
+            record prometheus.rules fail "alert rules never loaded"
+        fi
     else
         record prometheus.up skip "not requested (--with metrics)"
+        record prometheus.rules skip "not requested (--with metrics)"
     fi
 }
 
@@ -198,6 +208,14 @@ check_grafana() {
         probe_http_ok grafana.up "${GRAFANA_URL}/api/health"
     else
         record grafana.up skip "not requested (--with metrics)"
+    fi
+}
+
+check_alertmanager() {
+    if (( CHECKS_METRICS )); then
+        probe_http_ok alertmanager.up "${ALERTMANAGER_URL}/-/ready"
+    else
+        record alertmanager.up skip "not requested (--with metrics)"
     fi
 }
 
@@ -257,6 +275,7 @@ fi
 check_qdrant
 check_prometheus
 check_grafana
+check_alertmanager
 check_voice_process
 check_rag_process
 

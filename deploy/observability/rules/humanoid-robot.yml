@@ -1,0 +1,84 @@
+# Prometheus alert rules for the humanoid-robot platform.
+#
+# Kept intentionally narrow so a fresh operator doesn't drown in
+# noise on the first boot.  Every rule maps to a real, observable
+# situation on the robot; add more once you have baseline traffic
+# and know what "healthy" looks like.
+#
+# Rule reload: `docker compose exec prometheus wget -qO- --post-data '' http://127.0.0.1:9090/-/reload`
+
+groups:
+  - name: humanoid-robot.up
+    interval: 15s
+    rules:
+      - alert: CortexCoreDown
+        expr: up{job="cortex-core"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: cortex-core is not reachable
+          description: |
+            Prometheus has not scraped cortex-core's /metrics endpoint
+            for the last 30 s. The FastAPI orchestrator is either
+            crashed, deadlocked, or its container was killed.
+          runbook: |
+            docker compose ps
+            docker compose logs core --tail=200
+
+      - alert: NatsDown
+        expr: up{job="nats"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: NATS bus unreachable
+          description: |
+            NATS is down; every cortex-* service that depends on it will
+            fail to publish or subscribe. The safety gate, dispatcher, and
+            telemetry pump all become no-ops.
+          runbook: |
+            docker compose ps nats
+            docker compose logs nats --tail=200
+            docker compose restart nats
+
+      - alert: QdrantDown
+        expr: up{job="qdrant"} == 0
+        for: 60s
+        labels:
+          severity: warning
+        annotations:
+          summary: Qdrant vector store unreachable
+          description: |
+            RAG grounding cannot retrieve documents; llm.rejected events
+            will spike with reason "retrieval_failed" as callers time out
+            against the store. Voice pipeline continues to work.
+
+  - name: humanoid-robot.load
+    interval: 30s
+    rules:
+      - alert: CortexCoreHighCPU
+        expr: rate(process_cpu_seconds_total{job="cortex-core"}[3m]) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: cortex-core CPU pinned above 90%
+          description: |
+            Sustained CPU load on cortex-core for the last five minutes.
+            Likely culprits: a busy-loop in a background task, ASR
+            adapter sneaking onto the core process, or a runaway plugin.
+            Check /metrics for spikes in a specific handler.
+
+      - alert: CortexCoreMemoryHigh
+        expr: process_resident_memory_bytes{job="cortex-core"} > 1_073_741_824
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: cortex-core RSS > 1 GiB
+          description: |
+            Resident memory grew past 1 GiB and stayed there. Could be
+            an audit-DB backlog, a WS subscriber leak, or the event bus
+            buffering unread messages. Compare against safety.audit
+            table row count.
