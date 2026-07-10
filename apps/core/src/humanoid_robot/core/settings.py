@@ -78,6 +78,9 @@ class SafetySettings(BaseModel):
     command_timeout_s: float = 3.0
     command_check_interval_s: float = 0.5
     audit_db_path: Path = Path("var/safety_audit.sqlite")
+    audit_max_rows: int | None = 100_000
+    audit_max_age_days: float | None = 30.0
+    audit_rotation_interval_s: float = 3_600.0
     max_linear_speed_mps: float = 0.5
     max_angular_rate_rps: float = 1.0
 

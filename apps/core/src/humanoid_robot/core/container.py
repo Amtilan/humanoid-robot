@@ -138,7 +138,13 @@ class AppContainer:
         )
         await safety_reconciler.start()
 
-        safety_audit = SafetyAuditRecorder(bus=bus, db_path=settings.safety.audit_db_path)
+        safety_audit = SafetyAuditRecorder(
+            bus=bus,
+            db_path=settings.safety.audit_db_path,
+            max_rows=settings.safety.audit_max_rows,
+            max_age_days=settings.safety.audit_max_age_days,
+            rotation_interval_s=settings.safety.audit_rotation_interval_s,
+        )
         await safety_audit.start()
 
         return cls(

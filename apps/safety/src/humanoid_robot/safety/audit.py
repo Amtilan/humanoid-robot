@@ -14,6 +14,7 @@ import contextlib
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import aiosqlite
@@ -67,14 +68,27 @@ class AuditRecord(BaseModel):
 
 @dataclass(slots=True)
 class SafetyAuditRecorder:
-    """Subscribes to safety-adjacent subjects and persists them."""
+    """Subscribes to safety-adjacent subjects and persists them.
+
+    Optional rotation:
+    - ``max_rows``: keep at most this many rows; oldest ids are deleted
+    - ``max_age_days``: delete rows whose ``occurred_at`` is older
+    - ``rotation_interval_s``: cadence of the pruner background task
+
+    ``max_rows=None`` and ``max_age_days=None`` disables that leg.
+    """
 
     bus: EventBusPort
     db_path: Path
     subjects: tuple[str, ...] = _DEFAULT_SUBJECTS
+    max_rows: int | None = None
+    max_age_days: float | None = None
+    rotation_interval_s: float = 3_600.0
     _connection: aiosqlite.Connection | None = None
     _subscriptions: list[Subscription] = field(default_factory=list)
     _write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    _rotation_task: asyncio.Task[None] | None = None
+    _stop: asyncio.Event = field(default_factory=asyncio.Event)
 
     async def start(self) -> None:
         if self._connection is not None:
@@ -87,17 +101,70 @@ class SafetyAuditRecorder:
         for subject in self.subjects:
             sub = await self.bus.subscribe(subject, self._on_event)
             self._subscriptions.append(sub)
-        _LOG.info("audit.ready", db=str(self.db_path), subjects=list(self.subjects))
+        if self.max_rows is not None or self.max_age_days is not None:
+            self._rotation_task = asyncio.create_task(self._rotation_loop(), name="audit-rotation")
+        _LOG.info(
+            "audit.ready",
+            db=str(self.db_path),
+            subjects=list(self.subjects),
+            max_rows=self.max_rows,
+            max_age_days=self.max_age_days,
+        )
 
     async def stop(self) -> None:
+        self._stop.set()
         for sub in self._subscriptions:
             with contextlib.suppress(Exception):
                 await sub.cancel()
         self._subscriptions.clear()
+        if self._rotation_task is not None:
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._rotation_task
+            self._rotation_task = None
         if self._connection is not None:
             with contextlib.suppress(Exception):
                 await self._connection.close()
             self._connection = None
+
+    async def prune_once(self) -> int:
+        """Delete rows above max_rows/max_age_days.  Returns deleted count."""
+        conn = self._connection
+        if conn is None:
+            return 0
+        deleted = 0
+        async with self._write_lock:
+            if self.max_age_days is not None:
+                cutoff = (datetime.now(UTC) - timedelta(days=self.max_age_days)).isoformat()
+                cur = await conn.execute(
+                    "DELETE FROM audit_events WHERE occurred_at < ?", (cutoff,)
+                )
+                deleted += cur.rowcount or 0
+                await cur.close()
+            if self.max_rows is not None:
+                cur = await conn.execute(
+                    "DELETE FROM audit_events WHERE id NOT IN "
+                    "(SELECT id FROM audit_events ORDER BY id DESC LIMIT ?)",
+                    (int(self.max_rows),),
+                )
+                deleted += cur.rowcount or 0
+                await cur.close()
+            if deleted:
+                await conn.commit()
+        return deleted
+
+    async def _rotation_loop(self) -> None:
+        # Sleep first so callers can seed the DB before the first prune.
+        while not self._stop.is_set():
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._stop.wait(), timeout=self.rotation_interval_s)
+            if self._stop.is_set():
+                return
+            try:
+                deleted = await self.prune_once()
+                if deleted:
+                    _LOG.info("audit.rotation_pruned", deleted=deleted)
+            except Exception:
+                _LOG.exception("audit.rotation_failed")
 
     async def _on_event(self, event: BaseEvent) -> None:
         payload = event.model_dump(mode="json", exclude={"meta"})
