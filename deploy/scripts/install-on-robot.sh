@@ -24,12 +24,24 @@ RAW_BASE="https://raw.githubusercontent.com/${REPO}/${RELEASE_REF}"
 # --skip-verify (or HR_INSTALL_SKIP_VERIFY=1) bypasses the fail-closed
 # cosign check. Use ONLY for dev builds that were never pushed to GHCR.
 SKIP_VERIFY="${HR_INSTALL_SKIP_VERIFY:-0}"
+# --fix-egress (or HR_INSTALL_FIX_EGRESS=1): on hosts where a second
+# default route (e.g. the G1's eth10 DDS plane) shadows the internet
+# route, temporarily add a low-metric default via a genuinely-online
+# interface for the duration of the pull, then restore.  Reversible.
+# --keep-egress leaves that route in place afterwards.
+FIX_EGRESS="${HR_INSTALL_FIX_EGRESS:-0}"
+KEEP_EGRESS="${HR_INSTALL_KEEP_EGRESS:-0}"
 for arg in "$@"; do
     case "${arg}" in
         --skip-verify) SKIP_VERIFY=1 ;;
+        --fix-egress) FIX_EGRESS=1 ;;
+        --keep-egress) FIX_EGRESS=1; KEEP_EGRESS=1 ;;
         *) echo "unknown argument: ${arg}" >&2; exit 2 ;;
     esac
 done
+
+# Route we added for --fix-egress, recorded so we can revert exactly.
+_EGRESS_ROUTE=""
 
 need_root() {
     if [[ $EUID -ne 0 ]]; then
@@ -44,9 +56,89 @@ need_docker() {
         exit 1
     fi
     if ! docker compose version >/dev/null 2>&1; then
-        echo "'docker compose' plugin not found. Install docker-compose-plugin." >&2
+        bootstrap_compose_plugin
+    fi
+    if ! docker compose version >/dev/null 2>&1; then
+        echo "'docker compose' plugin still unavailable after bootstrap." >&2
         exit 1
     fi
+}
+
+# Map `uname -m` to the token docker/cosign use in their release asset
+# names. arm64 → the Jetson; amd64 → dev/CI hosts.
+_dpkg_arch() {
+    case "$(uname -m)" in
+        aarch64 | arm64) echo arm64 ;;
+        x86_64 | amd64) echo amd64 ;;
+        *) echo "unsupported arch: $(uname -m)" >&2; return 1 ;;
+    esac
+}
+
+# Some Jetson/JetPack images ship Docker Engine without the compose v2
+# CLI plugin. Drop the static binary in the well-known plugin dir.
+bootstrap_compose_plugin() {
+    local ver="v2.32.4"
+    local uname_m dest
+    uname_m="$(uname -m)"   # docker names assets by raw uname -m
+    dest="/usr/local/lib/docker/cli-plugins/docker-compose"
+    echo "docker compose plugin missing — installing ${ver} (${uname_m})…"
+    install -d -m 0755 "$(dirname "${dest}")"
+    curl -fsSL \
+        "https://github.com/docker/compose/releases/download/${ver}/docker-compose-linux-${uname_m}" \
+        -o "${dest}"
+    chmod +x "${dest}"
+}
+
+# Fail-closed verification needs cosign. Bootstrap it rather than
+# forcing the operator to hand-install before a first run.
+bootstrap_cosign() {
+    local ver="v2.4.1" arch dest
+    arch="$(_dpkg_arch)" || return 1
+    dest="/usr/local/bin/cosign"
+    echo "cosign missing — installing ${ver} (${arch})…"
+    curl -fsSL \
+        "https://github.com/sigstore/cosign/releases/download/${ver}/cosign-linux-${arch}" \
+        -o "${dest}"
+    chmod +x "${dest}"
+}
+
+# If the current default route can't actually reach GHCR, look for
+# another default-route interface that CAN and add a low-metric default
+# via it. Records the exact route in _EGRESS_ROUTE for revert_egress.
+fix_egress() {
+    if curl -fsSL -o /dev/null --max-time 8 https://ghcr.io/v2/ 2>/dev/null; then
+        echo "egress already works — no route change needed."
+        return 0
+    fi
+    echo "no egress via current default route; probing alternatives…"
+    # tuples: "<gw> <dev>" from every default route, tried low-metric first
+    while read -r gw dev; do
+        [[ -n "${gw}" && -n "${dev}" ]] || continue
+        if timeout 6 ping -c1 -W2 -I "${dev}" 8.8.8.8 >/dev/null 2>&1; then  # pragma: allowlist secret
+            echo "  ${dev} (via ${gw}) has internet — adding metric-50 default"
+            if ip route add default via "${gw}" dev "${dev}" metric 50 2>/dev/null; then
+                _EGRESS_ROUTE="default via ${gw} dev ${dev} metric 50"
+                # Give resolddns a beat; verify we actually reach GHCR now.
+                if curl -fsSL -o /dev/null --max-time 8 https://ghcr.io/v2/ 2>/dev/null; then
+                    echo "  egress restored via ${dev}."
+                    return 0
+                fi
+                echo "  route added but GHCR still unreachable; reverting." >&2
+                revert_egress
+            fi
+        fi
+    done < <(ip -o route show default | sed -n 's/.*via \([0-9.]*\) dev \([^ ]*\).*/\1 \2/p')
+    echo "could not establish egress automatically." >&2
+    return 1
+}
+
+revert_egress() {
+    [[ -n "${_EGRESS_ROUTE}" ]] || return 0
+    # shellcheck disable=SC2086 — _EGRESS_ROUTE is our own controlled string
+    ip route del ${_EGRESS_ROUTE} 2>/dev/null \
+        && echo "reverted temporary egress route." \
+        || echo "note: could not revert '${_EGRESS_ROUTE}' (already gone?)." >&2
+    _EGRESS_ROUTE=""
 }
 
 fetch() {
@@ -57,6 +149,17 @@ fetch() {
 
 main() {
     need_root
+
+    # Egress may be shadowed by a second default route (Jetson eth10).
+    # Fix it BEFORE anything that hits the network: the compose-plugin
+    # bootstrap, the raw.githubusercontent fetches, and the image pull
+    # all need it. Trap guarantees the temporary route is torn down even
+    # if the script dies mid-run.
+    if [[ "${FIX_EGRESS}" == "1" ]]; then
+        trap revert_egress EXIT
+        fix_egress || { echo "egress fix failed; aborting." >&2; exit 1; }
+    fi
+
     need_docker
 
     install -d -m 0755 "${INSTALL_DIR}"
@@ -140,6 +243,9 @@ EOF
         echo "Only appropriate for local dev builds that were never published to GHCR." >&2
     else
         echo
+        if ! command -v cosign >/dev/null 2>&1; then
+            bootstrap_cosign || true
+        fi
         # Fail-closed. If verify-images.sh exits non-zero we abort BEFORE
         # `docker compose pull` so unsigned/tampered images never land in
         # the local image store.
@@ -164,6 +270,18 @@ EOF
     echo
     echo "Pulling images (IMAGE_TAG=${IMAGE_TAG})…"
     ( cd "${INSTALL_DIR}" && docker compose pull )
+
+    # Images are local now; runtime needs no egress. Tear the temporary
+    # route down unless the operator asked to keep it.
+    if [[ "${FIX_EGRESS}" == "1" ]]; then
+        if [[ "${KEEP_EGRESS}" == "1" ]]; then
+            _EGRESS_ROUTE=""   # disarm the trap: leave the route up
+            echo "keeping egress route in place (--keep-egress)."
+        else
+            revert_egress
+        fi
+        trap - EXIT
+    fi
 
     cat <<EOF
 
