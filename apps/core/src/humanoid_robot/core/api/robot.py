@@ -10,11 +10,27 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from humanoid_robot.core.container import AppContainer
 from humanoid_robot.core.robot_manifest_cache import RobotManifestSnapshot
+from humanoid_robot.core.robot_telemetry_cache import RobotTelemetrySample
 from humanoid_robot.domain.shared import new_correlation_id
 from humanoid_robot.events import RobotCommandRequested
 from humanoid_robot.events.base import EventMetadata
 
 router = APIRouter()
+
+
+@router.get("/telemetry", response_model=list[RobotTelemetrySample])
+async def list_telemetry(request: Request) -> list[RobotTelemetrySample]:
+    container: AppContainer = request.app.state.container
+    return list(await container.robot_telemetry_cache.all())
+
+
+@router.get("/telemetry/{kind}", response_model=RobotTelemetrySample)
+async def get_telemetry(kind: str, request: Request) -> RobotTelemetrySample:
+    container: AppContainer = request.app.state.container
+    sample = await container.robot_telemetry_cache.get(kind)
+    if sample is None:
+        raise HTTPException(status_code=404, detail=f"no telemetry cached for kind {kind!r}")
+    return sample
 
 
 @router.get("/manifests", response_model=list[RobotManifestSnapshot])

@@ -19,6 +19,7 @@ from humanoid_robot.core.diagnostics_ticker import DiagnosticsTicker
 from humanoid_robot.core.knowledge_service import KnowledgeService
 from humanoid_robot.core.plugin_manager import PluginManager
 from humanoid_robot.core.robot_manifest_cache import RobotManifestCache
+from humanoid_robot.core.robot_telemetry_cache import RobotTelemetryCache
 from humanoid_robot.core.settings import CoreSettings
 from humanoid_robot.observability import PromMetrics
 from humanoid_robot.plugins_sdk import PluginRegistry
@@ -61,7 +62,9 @@ class AppContainer:
     safety_watchdog: SafetyWatchdog | None = field(default=None)
     safety_reconciler: CommandReconciler | None = field(default=None)
     safety_audit: SafetyAuditRecorder | None = field(default=None)
+    robot_telemetry_cache: RobotTelemetryCache = field(default_factory=RobotTelemetryCache)
     _manifest_subscription: Subscription | None = field(default=None)
+    _telemetry_subscription: Subscription | None = field(default=None)
 
     @classmethod
     async def create(cls, settings: CoreSettings) -> Self:
@@ -88,6 +91,9 @@ class AppContainer:
 
         manifest_cache = RobotManifestCache()
         manifest_subscription = await manifest_cache.start(bus)
+
+        telemetry_cache = RobotTelemetryCache()
+        telemetry_subscription = await telemetry_cache.start(bus)
 
         diagnostics_ticker = DiagnosticsTicker(bus=bus)
         await diagnostics_ticker.start()
@@ -161,7 +167,9 @@ class AppContainer:
             safety_watchdog=safety_watchdog,
             safety_reconciler=safety_reconciler,
             safety_audit=safety_audit,
+            robot_telemetry_cache=telemetry_cache,
             _manifest_subscription=manifest_subscription,
+            _telemetry_subscription=telemetry_subscription,
         )
 
     async def close(self) -> None:
@@ -186,6 +194,10 @@ class AppContainer:
                 await self.safety_task
             self.safety_task = None
         self.safety_gate = None
+        if self._telemetry_subscription is not None:
+            with contextlib.suppress(Exception):
+                await self._telemetry_subscription.cancel()
+            self._telemetry_subscription = None
         if self._manifest_subscription is not None:
             with contextlib.suppress(Exception):
                 await self._manifest_subscription.cancel()

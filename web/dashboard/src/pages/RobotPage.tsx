@@ -1,7 +1,11 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { api, type RobotManifestSnapshot } from "../api/client";
+import {
+  api,
+  type RobotManifestSnapshot,
+  type RobotTelemetrySample,
+} from "../api/client";
 import {
   useEventSubscription,
   type EventEnvelope,
@@ -20,6 +24,33 @@ export function RobotPage() {
   useEventSubscription("robot.>", (envelope) => {
     setFeed((prev) => [envelope, ...prev].slice(0, MAX_FEED));
   });
+
+  const client = useQueryClient();
+  const telemetryQuery = useQuery({
+    queryKey: ["robot", "telemetry"],
+    queryFn: api.robotTelemetry,
+    refetchInterval: 15_000,
+  });
+  useEventSubscription("robot.telemetry", (envelope) => {
+    const kind = envelope.data.kind;
+    const payload = envelope.data.payload;
+    if (typeof kind !== "string" || typeof payload !== "object" || payload === null) return;
+    const sample: RobotTelemetrySample = {
+      kind,
+      payload: payload as Record<string, unknown>,
+      observed_at: envelope.occurred_at,
+      producer: envelope.producer,
+    };
+    client.setQueryData<RobotTelemetrySample[]>(["robot", "telemetry"], (prev) => {
+      const others = (prev ?? []).filter((s) => s.kind !== sample.kind);
+      return [...others, sample];
+    });
+  });
+  const battery = telemetryQuery.data?.find((s) => s.kind === "battery");
+  const batteryPct =
+    battery && typeof battery.payload.percentage === "number"
+      ? (battery.payload.percentage as number)
+      : null;
 
   const { push } = useToast();
   const [submitter, setSubmitter] = useState("operator");
@@ -48,11 +79,14 @@ export function RobotPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Robot</h1>
-        <p className="text-sm text-muted-foreground">
-          Latest manifest reported by each adapter on the bus.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Robot</h1>
+          <p className="text-sm text-muted-foreground">
+            Latest manifest reported by each adapter on the bus.
+          </p>
+        </div>
+        {batteryPct !== null && <BatteryBadge percentage={batteryPct} />}
       </div>
 
       <div className="rounded-lg border border-border bg-background/40 p-4">
@@ -225,6 +259,23 @@ function Info({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div className="font-mono">{value}</div>
+    </div>
+  );
+}
+
+function BatteryBadge({ percentage }: { percentage: number }) {
+  const pct = Math.max(0, Math.min(1, percentage));
+  const label = `${Math.round(pct * 100)}%`;
+  const style =
+    pct < 0.15
+      ? "border-red-500/50 bg-red-500/10 text-red-300"
+      : pct < 0.3
+        ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-300"
+        : "border-emerald-500/50 bg-emerald-500/10 text-emerald-300";
+  return (
+    <div className={`rounded-lg border ${style} px-3 py-2 text-sm`}>
+      <div className="text-[10px] uppercase tracking-wide opacity-80">Battery</div>
+      <div className="font-mono text-lg font-semibold">{label}</div>
     </div>
   );
 }

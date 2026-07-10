@@ -12,9 +12,19 @@ from humanoid_robot.events import RobotAdapterReady, SystemShuttingDown
 from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.observability import get_logger
 from humanoid_robot.plugins_sdk import AdapterRegistry
-from humanoid_robot.ports import ArmPort, EventBusPort, LocomotionPort, RobotAdapterPort
+from humanoid_robot.ports import (
+    ArmPort,
+    BatteryPort,
+    EventBusPort,
+    LocomotionPort,
+    RobotAdapterPort,
+)
 from humanoid_robot.robot_adapter_app.dispatcher import CommandDispatcher
 from humanoid_robot.robot_adapter_app.settings import RobotAdapterSettings
+from humanoid_robot.robot_adapter_app.telemetry_pump import (
+    TelemetryPump,
+    battery_source,
+)
 
 
 def _resolve_locomotion(adapter: RobotAdapterPort) -> LocomotionPort | None:
@@ -37,6 +47,13 @@ def _resolve_arm(adapter: RobotAdapterPort) -> ArmPort | None:
     return None
 
 
+def _resolve_battery(adapter: RobotAdapterPort) -> BatteryPort | None:
+    sub = getattr(adapter, "battery", None)
+    if sub is not None and isinstance(sub, BatteryPort):
+        return sub
+    return None
+
+
 _LOG = get_logger("cortex-robot-adapter")
 
 
@@ -47,6 +64,7 @@ class AdapterRunner:
     _adapter: RobotAdapterPort | None = None
     _bus: EventBusPort | None = None
     _dispatcher: CommandDispatcher | None = None
+    _telemetry: TelemetryPump | None = None
     _stop: asyncio.Event = field(default_factory=asyncio.Event)
 
     def request_stop(self) -> None:
@@ -89,6 +107,17 @@ class AdapterRunner:
         await dispatcher.start()
         self._dispatcher = dispatcher
 
+        telemetry = TelemetryPump(
+            bus=bus,
+            interval_s=self.settings.telemetry_interval_s,
+            producer=self.settings.service_name,
+        )
+        battery = _resolve_battery(adapter)
+        if battery is not None:
+            telemetry.register(battery_source(battery))
+        await telemetry.start()
+        self._telemetry = telemetry
+
         await bus.publish(
             RobotAdapterReady(
                 meta=EventMetadata(
@@ -109,11 +138,22 @@ class AdapterRunner:
 
     async def _teardown(self) -> None:
         _LOG.info("adapter_runner.shutting_down")
+        await self._teardown_workers()
+        await self._teardown_bus_and_adapter()
+
+    async def _teardown_workers(self) -> None:
+        if self._telemetry is not None:
+            try:
+                await self._telemetry.stop()
+            except Exception:
+                _LOG.exception("telemetry stop raised")
         if self._dispatcher is not None:
             try:
                 await self._dispatcher.stop()
             except Exception:
                 _LOG.exception("dispatcher stop raised")
+
+    async def _teardown_bus_and_adapter(self) -> None:
         if self._bus is not None:
             try:
                 await self._bus.publish(

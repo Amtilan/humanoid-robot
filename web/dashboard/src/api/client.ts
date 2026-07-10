@@ -93,6 +93,13 @@ export interface RobotManifestSnapshot {
   observed_at: string;
 }
 
+export interface RobotTelemetrySample {
+  kind: string;
+  payload: Record<string, unknown>;
+  observed_at: string;
+  producer: string;
+}
+
 export interface RagAskRequest {
   question: string;
   language?: "ru" | "en" | "und";
@@ -197,6 +204,7 @@ export const api = {
   deactivatePlugin: (name: string) =>
     postJson<PluginStatus>(`/api/v1/plugins/${encodeURIComponent(name)}/deactivate`),
   robotManifests: () => getJson<RobotManifestSnapshot[]>("/api/v1/robot/manifests"),
+  robotTelemetry: () => getJson<RobotTelemetrySample[]>("/api/v1/robot/telemetry"),
   robotCommand: (body: {
     capability: string;
     payload: Record<string, unknown>;

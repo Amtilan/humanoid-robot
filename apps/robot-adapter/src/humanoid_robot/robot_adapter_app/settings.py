@@ -38,6 +38,7 @@ class RobotAdapterSettings(BaseSettings):
     adapter_config: dict[str, Any] = Field(default_factory=dict)
     nats: NatsSettings = NatsSettings()
     log_level: str = "INFO"
+    telemetry_interval_s: float = 5.0
 
     @classmethod
     def settings_customise_sources(
