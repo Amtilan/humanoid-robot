@@ -158,6 +158,34 @@ so the real adapter + exposed dashboard come up together and survive
 reboot. `192.168.0.61` is DHCP — reserve it or use Tailscale for a truly
 stable link.
 
+### Phase B3 — first motion attempt (2026-07-10)
+
+First real command through the full stack, robot secured + e-stop in
+hand. **The command + safety pipeline is proven end-to-end on hardware**:
+released the gate → `head.pose` (yaw 0.1 rad) → gate `KnownCapabilities +
+EStop` policies allowed it (audit `safety.command.forwarded`) → adapter
+dispatched → then re-engaged the gate. Clean, no runaway.
+
+**But no motion happened**: the installed `unitree_sdk2py` `LocoClient`
+has **no head-pose method** — `head.py` probes SetHeadPose / HeadPose /
+SetHead and none exist, so it returned a clean `hardware_error` (exactly
+the safe worst case). The G1 EDU head isn't actuated through this client.
+
+Introspected `LocoClient` — what the SDK actually exposes:
+`Move`, `SetVelocity`, `StopMove`, `BalanceStand`, `HighStand`,
+`LowStand`, `Sit`, `Squat2StandUp`, `StandUp2Squat`, `SetStandHeight`,
+`Damp`, `ZeroTorque`, `WaveHand`, `ShakeHand`, `SetBalanceMode`,
+`SetFsmId`. And `G1ArmActionClient`: `ExecuteAction` + `GetActionList`.
+
+Follow-ups this surfaced:
+- `head.pose` can't work on this SDK → either drop it from the G1
+  manifest or remap `head.py` (there's no head actuation to remap to,
+  so likely drop/mark-unavailable).
+- Real small motions that WOULD work: `LocoClient.WaveHand` /
+  `ShakeHand`, or `arms.gesture` via `ExecuteAction` (needs the real
+  action IDs from `GetActionList`). All are arm motions — bigger than a
+  head tilt, so they need clear space + the operator on the e-stop.
+
 ### Phase B — real Unitree adapter (the motion blocker)
 1. Package `unitree_sdk2py` + `cyclonedds` into an **arm64 adapter image
    variant** (they're the missing runtime deps). Pin against the C++ SDK
