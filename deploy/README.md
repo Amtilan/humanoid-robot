@@ -139,6 +139,18 @@ every `vX.Y.Z` tag):
 - `ghcr.io/amtilan/humanoid-robot-base`
 - `ghcr.io/amtilan/humanoid-robot-dashboard`
 
+Every publish runs two follow-up matrix jobs:
+
+- **Trivy** scans each image for HIGH/CRITICAL fixable CVEs, uploads
+  SARIF to the GitHub Security tab (viewable under Security → Code
+  scanning), and drops the raw file as a workflow artefact for 30
+  days. Findings never block the publish itself — the point is
+  visibility, not gating a fix behind a CI flake.
+- **Syft** generates an SPDX-JSON SBOM per image, uploaded as an
+  artefact with a 90-day retention. Reach for it when responding to a
+  supply-chain question (which package version is in `sha-abc1234`?
+  which base layer? etc.).
+
 ### Cutting a release
 
 Tag-based releases are driven by `.github/workflows/release.yaml`

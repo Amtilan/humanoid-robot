@@ -24,6 +24,7 @@ concurrency:
 permissions:
   contents: read
   packages: write
+  security-events: write   # SARIF upload to GitHub Advanced Security
 
 env:
   REGISTRY: ghcr.io
@@ -33,6 +34,9 @@ jobs:
   build:
     name: build+push (${{ matrix.image.name }})
     runs-on: ubuntu-24.04
+    outputs:
+      digest_base:      ${{ steps.export.outputs.digest_humanoid-robot-base }}
+      digest_dashboard: ${{ steps.export.outputs.digest_humanoid-robot-dashboard }}
     strategy:
       fail-fast: false
       matrix:
@@ -75,6 +79,7 @@ jobs:
             org.opencontainers.image.licenses=Apache-2.0
 
       - name: Build + push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -85,3 +90,121 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.image.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}
+
+      - name: Export digest for downstream scan
+        id: export
+        run: |
+          echo "digest_${{ matrix.image.name }}=${{ steps.build.outputs.digest }}" \
+              >> "$GITHUB_OUTPUT"
+
+  scan:
+    name: trivy scan (${{ matrix.image.name }})
+    runs-on: ubuntu-24.04
+    needs: build
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: humanoid-robot-base
+          - name: humanoid-robot-dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image reference
+        id: ref
+        run: |
+          # Always scan the sha-<short> tag from this build so we're
+          # provably looking at exactly what publish just pushed.
+          short=${GITHUB_SHA:0:7}
+          echo "image=${REGISTRY}/${IMAGE_OWNER}/${{ matrix.image.name }}:sha-${short}" \
+              >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR (pull only)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trivy CVE scan → SARIF
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.ref.outputs.image }}
+          format: sarif
+          output: trivy-${{ matrix.image.name }}.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"      # never block the publish job on findings;
+                              # SARIF upload surfaces them separately.
+
+      - name: Trivy CVE scan → summary table
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.ref.outputs.image }}
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Upload SARIF to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.image.name }}.sarif
+          category: trivy-${{ matrix.image.name }}
+
+      - name: Upload raw SARIF as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ matrix.image.name }}
+          path: trivy-${{ matrix.image.name }}.sarif
+          if-no-files-found: warn
+          retention-days: 30
+
+  sbom:
+    name: syft SBOM (${{ matrix.image.name }})
+    runs-on: ubuntu-24.04
+    needs: build
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: humanoid-robot-base
+          - name: humanoid-robot-dashboard
+    steps:
+      - name: Resolve image reference
+        id: ref
+        run: |
+          short=${GITHUB_SHA:0:7}
+          echo "image=${REGISTRY}/${IMAGE_OWNER}/${{ matrix.image.name }}:sha-${short}" \
+              >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR (pull only)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.ref.outputs.image }}
+          format: spdx-json
+          output-file: sbom-${{ matrix.image.name }}.spdx.json
+          upload-artifact: false
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.image.name }}
+          path: sbom-${{ matrix.image.name }}.spdx.json
+          retention-days: 90
