@@ -13,6 +13,7 @@ from typing import Protocol, runtime_checkable
 from pydantic import BaseModel, ConfigDict, Field
 
 from humanoid_robot.domain.robot import (
+    HeadPoseCommand,
     MoveCommand,
     RobotCapabilities,
     RobotCommandResult,
@@ -80,6 +81,15 @@ class HandPort(Protocol):
     async def close(self) -> RobotCommandResult: ...
 
     async def set_positions(self, positions: tuple[float, ...]) -> RobotCommandResult: ...
+
+
+@runtime_checkable
+class HeadPort(Protocol):
+    """Orients the robot's head to an absolute (pitch, yaw) pose."""
+
+    async def set_pose(self, cmd: HeadPoseCommand) -> RobotCommandResult: ...
+
+    async def reset(self) -> RobotCommandResult: ...
 
 
 @runtime_checkable

@@ -26,6 +26,7 @@ from humanoid_robot.ports.robot import (
     AudioOutPort,
     BatteryPort,
     HandPort,
+    HeadPort,
     LocomotionPort,
     RobotAdapterPort,
 )
@@ -56,6 +57,7 @@ __all__ = [
     "EventBusPort",
     "EventHandler",
     "HandPort",
+    "HeadPort",
     "KnowledgeSourceSummary",
     "LlmPort",
     "LlmRequest",

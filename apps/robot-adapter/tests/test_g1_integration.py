@@ -13,7 +13,11 @@ from humanoid_robot.domain.shared import new_correlation_id
 from humanoid_robot.events import RobotCommandResulted, SafetyCommandForwarded
 from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.robot_adapter_app.dispatcher import CommandDispatcher
-from humanoid_robot.robot_adapter_app.runner import _resolve_arm, _resolve_locomotion
+from humanoid_robot.robot_adapter_app.runner import (
+    _resolve_arm,
+    _resolve_head,
+    _resolve_locomotion,
+)
 from humanoid_robot.testing import InMemoryEventBus
 
 
@@ -153,6 +157,46 @@ async def test_dispatcher_arm_missing_gesture_field_rejected() -> None:
     result = next(ev for ev in bus.published if isinstance(ev, RobotCommandResulted))
     assert result.result.outcome == MoveOutcome.REJECTED_BY_POLICY
     assert result.result.error_code == "missing_gesture"
+
+    await dispatcher.stop()
+
+
+@dataclass(slots=True)
+class _FakeHeadClient:
+    pose_calls: list[tuple[float, float]] = field(default_factory=list)
+
+    def Init(self) -> None:  # noqa: N802
+        return None
+
+    def SetTimeout(self, _s: float) -> None:  # noqa: N802
+        return None
+
+    def SetHeadPose(self, pitch: float, yaw: float) -> int:  # noqa: N802
+        self.pose_calls.append((pitch, yaw))
+        return 0
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_drives_g1_head_pose_end_to_end() -> None:
+    bus = InMemoryEventBus()
+    adapter = UnitreeG1Adapter()
+    fake_head = _FakeHeadClient()
+    adapter.attach_head_client(fake_head)
+
+    dispatcher = CommandDispatcher(bus=bus)
+    head = _resolve_head(adapter)
+    assert head is not None
+    dispatcher.register_head(head)
+    await dispatcher.start()
+
+    await bus.publish(
+        _forward("head.pose", {"pitch_rad": 0.2, "yaw_rad": -0.4, "duration_ms": 300})
+    )
+    await _wait_for(lambda: any(isinstance(ev, RobotCommandResulted) for ev in bus.published))
+
+    result = next(ev for ev in bus.published if isinstance(ev, RobotCommandResulted))
+    assert result.result.outcome == MoveOutcome.ACCEPTED
+    assert fake_head.pose_calls == [(0.2, -0.4)]
 
     await dispatcher.stop()
 

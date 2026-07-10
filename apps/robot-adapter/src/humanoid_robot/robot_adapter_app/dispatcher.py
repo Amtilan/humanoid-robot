@@ -18,6 +18,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from humanoid_robot.domain.robot import (
+    HeadPoseCommand,
     MoveCommand,
     MoveOutcome,
     RobotCommandResult,
@@ -31,7 +32,13 @@ from humanoid_robot.events import (
 )
 from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.observability import get_logger
-from humanoid_robot.ports import ArmPort, EventBusPort, LocomotionPort, Subscription
+from humanoid_robot.ports import (
+    ArmPort,
+    EventBusPort,
+    HeadPort,
+    LocomotionPort,
+    Subscription,
+)
 
 _LOG = get_logger("cortex-robot-adapter.dispatcher")
 
@@ -77,6 +84,16 @@ class CommandDispatcher:
 
         self.register("arms.gesture", _gesture)
         self.register("arms.release", _release)
+
+    def register_head(self, head: HeadPort) -> None:
+        async def _pose(payload: dict[str, object]) -> RobotCommandResult:
+            return await head.set_pose(HeadPoseCommand.model_validate(payload))
+
+        async def _reset(_payload: dict[str, object]) -> RobotCommandResult:
+            return await head.reset()
+
+        self.register("head.pose", _pose)
+        self.register("head.reset", _reset)
 
     async def start(self) -> None:
         if self._subscription is not None:

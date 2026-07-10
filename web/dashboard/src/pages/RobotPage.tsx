@@ -183,6 +183,39 @@ export function RobotPage() {
             disabled={command.isPending}
           />
           <CmdButton
+            label="← head yaw −0.4"
+            onClick={() =>
+              command.mutate({
+                capability: "head.pose",
+                payload: { pitch_rad: 0, yaw_rad: -0.4, duration_ms: 400 },
+                submitter,
+              })
+            }
+            disabled={command.isPending}
+          />
+          <CmdButton
+            label="→ head yaw +0.4"
+            onClick={() =>
+              command.mutate({
+                capability: "head.pose",
+                payload: { pitch_rad: 0, yaw_rad: 0.4, duration_ms: 400 },
+                submitter,
+              })
+            }
+            disabled={command.isPending}
+          />
+          <CmdButton
+            label="⌂ head reset"
+            onClick={() =>
+              command.mutate({
+                capability: "head.reset",
+                payload: {},
+                submitter,
+              })
+            }
+            disabled={command.isPending}
+          />
+          <CmdButton
             label="■ stop"
             onClick={() =>
               command.mutate({

@@ -14,6 +14,7 @@ from humanoid_robot.domain.robot.capabilities import (
     RobotModel,
 )
 from humanoid_robot.domain.robot.commands import (
+    HeadPoseCommand,
     MoveCommand,
     MoveOutcome,
     RobotCommandResult,
@@ -27,6 +28,7 @@ __all__ = [
     "CameraCapability",
     "HandCapability",
     "HeadCapability",
+    "HeadPoseCommand",
     "LocomotionCapability",
     "LocomotionKind",
     "MoveCommand",

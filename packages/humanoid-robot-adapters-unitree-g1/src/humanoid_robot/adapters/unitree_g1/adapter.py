@@ -18,6 +18,7 @@ from humanoid_robot.adapters.unitree_g1.arm import UnitreeG1Arm
 from humanoid_robot.adapters.unitree_g1.audio_in import G1AudioInConfig, UnitreeG1AudioIn
 from humanoid_robot.adapters.unitree_g1.audio_out import UnitreeG1AudioOut
 from humanoid_robot.adapters.unitree_g1.battery import UnitreeG1Battery
+from humanoid_robot.adapters.unitree_g1.head import UnitreeG1Head
 from humanoid_robot.adapters.unitree_g1.imu import UnitreeG1Imu
 from humanoid_robot.adapters.unitree_g1.locomotion import UnitreeG1LocomotionAdapter
 from humanoid_robot.adapters.unitree_g1.manifest import build_manifest
@@ -48,6 +49,7 @@ class UnitreeG1Adapter:
     _start_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     _locomotion: UnitreeG1LocomotionAdapter | None = None
     _arm: UnitreeG1Arm | None = None
+    _head: UnitreeG1Head | None = None
     _battery: UnitreeG1Battery | None = None
     _imu: UnitreeG1Imu | None = None
     _temperature: UnitreeG1Temperature | None = None
@@ -67,6 +69,7 @@ class UnitreeG1Adapter:
         self._audio_in = None
         self._audio_out = None
         self._temperature = None
+        self._head = None
 
     @classmethod
     def from_settings(cls, settings: UnitreeG1Settings) -> Self:
@@ -82,6 +85,7 @@ class UnitreeG1Adapter:
         obj._audio_in = None
         obj._audio_out = None
         obj._temperature = None
+        obj._head = None
         return obj
 
     # ---- RobotAdapterPort ---------------------------------------------------
@@ -152,6 +156,16 @@ class UnitreeG1Adapter:
         arm = UnitreeG1Arm()
         arm.attach_client(client, action_map=action_map)
         self._arm = arm
+
+    @property
+    def head(self) -> UnitreeG1Head:
+        if self._head is None:
+            self._head = UnitreeG1Head()
+        return self._head
+
+    def attach_head_client(self, client: object) -> None:
+        """Test hook: inject a fake LocoClient for head control."""
+        self._head = UnitreeG1Head(client=client)
 
     @property
     def battery(self) -> UnitreeG1Battery:

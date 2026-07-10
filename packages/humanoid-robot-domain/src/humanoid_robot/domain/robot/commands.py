@@ -26,6 +26,16 @@ class StopCommand(BaseModel):
     reason: str = "user_requested"
 
 
+class HeadPoseCommand(BaseModel):
+    """Absolute head orientation (radians)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    pitch_rad: float = Field(ge=-1.0, le=1.0)  # ~±57°
+    yaw_rad: float = Field(ge=-1.5, le=1.5)  # ~±86°
+    duration_ms: int = Field(ge=0, le=10_000, default=0)
+
+
 class MoveOutcome(StrEnum):
     ACCEPTED = "accepted"
     REJECTED_BY_POLICY = "rejected_by_policy"

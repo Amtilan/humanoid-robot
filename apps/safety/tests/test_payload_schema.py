@@ -50,9 +50,26 @@ async def test_out_of_range_denies() -> None:
 @pytest.mark.asyncio
 async def test_unknown_capability_passes_through() -> None:
     policy = PayloadSchemaPolicy()
-    decision = await policy.evaluate(_req("head.pose", {"pitch": 0.1}))
+    decision = await policy.evaluate(_req("voice.speak", {"text": "hi"}))
     assert decision.verdict == "allow"
     assert "no schema" in decision.reason
+
+
+@pytest.mark.asyncio
+async def test_head_pose_valid_payload_allows() -> None:
+    policy = PayloadSchemaPolicy()
+    decision = await policy.evaluate(
+        _req("head.pose", {"pitch_rad": 0.2, "yaw_rad": -0.4, "duration_ms": 300})
+    )
+    assert decision.verdict == "allow"
+
+
+@pytest.mark.asyncio
+async def test_head_pose_out_of_range_denies() -> None:
+    policy = PayloadSchemaPolicy()
+    decision = await policy.evaluate(_req("head.pose", {"pitch_rad": 5.0, "yaw_rad": 0.0}))
+    assert decision.verdict == "deny"
+    assert "pitch_rad" in decision.reason
 
 
 @pytest.mark.asyncio

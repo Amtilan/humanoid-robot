@@ -16,6 +16,7 @@ from humanoid_robot.ports import (
     ArmPort,
     BatteryPort,
     EventBusPort,
+    HeadPort,
     LocomotionPort,
     RobotAdapterPort,
 )
@@ -45,6 +46,13 @@ def _resolve_locomotion(adapter: RobotAdapterPort) -> LocomotionPort | None:
 def _resolve_arm(adapter: RobotAdapterPort) -> ArmPort | None:
     sub = getattr(adapter, "arm", None)
     if sub is not None and isinstance(sub, ArmPort):
+        return sub
+    return None
+
+
+def _resolve_head(adapter: RobotAdapterPort) -> HeadPort | None:
+    sub = getattr(adapter, "head", None)
+    if sub is not None and isinstance(sub, HeadPort):
         return sub
     return None
 
@@ -106,6 +114,9 @@ class AdapterRunner:
         arm = _resolve_arm(adapter)
         if arm is not None:
             dispatcher.register_arm(arm)
+        head = _resolve_head(adapter)
+        if head is not None:
+            dispatcher.register_head(head)
         await dispatcher.start()
         self._dispatcher = dispatcher
 
