@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api, type SafetyStatus } from "../api/client";
 import { useEventSubscription, type EventEnvelope } from "../lib/eventStream";
 import { useToast } from "../lib/toast";
+import { AuditPanel } from "./SafetyAuditPanel";
 
 const isSafetySubject = (subject: string) =>
   subject === "safety.estop.engaged" ||
@@ -203,6 +204,8 @@ export function SafetyPage() {
           </Card>
         </div>
       )}
+
+      <AuditPanel />
 
       <div className="rounded-lg border border-border bg-background/40 p-4">
         <div className="pb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">

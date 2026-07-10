@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -23,6 +24,7 @@ from humanoid_robot.safety import (
     EStopPolicy,
     EStopState,
     KnownCapabilitiesPolicy,
+    SafetyAuditRecorder,
     SafetyGate,
     SafetyWatchdog,
 )
@@ -30,7 +32,7 @@ from humanoid_robot.testing import InMemoryEventBus
 
 
 @pytest.fixture
-def app() -> FastAPI:
+def app(tmp_path: Path) -> FastAPI:
     settings = CoreSettings()
     bus = InMemoryEventBus()
     registry = CollectorRegistry()
@@ -57,6 +59,7 @@ def app() -> FastAPI:
         timeout_s=settings.safety.command_timeout_s,
         check_interval_s=settings.safety.command_check_interval_s,
     )
+    audit = SafetyAuditRecorder(bus=bus, db_path=tmp_path / "audit.sqlite")
     container = AppContainer(
         settings=settings,
         event_bus=bus,
@@ -67,10 +70,12 @@ def app() -> FastAPI:
         safety_gate=gate,
         safety_watchdog=watchdog,
         safety_reconciler=reconciler,
+        safety_audit=audit,
     )
 
     @asynccontextmanager
     async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+        await audit.start()
         app.state.container = container
         try:
             yield
@@ -141,3 +146,18 @@ class TestSafetyApi:
         assert "command_timeout_s" in body
         assert body["pending_command_count"] == 0
         assert body["pending_command_ids"] == []
+
+    def test_audit_records_engage_release_flow(self, app: FastAPI) -> None:
+        with TestClient(app) as client:
+            client.post("/api/v1/safety/estop/release", json={"actor": "audit-op"})
+            client.post(
+                "/api/v1/safety/estop/engage",
+                json={"actor": "audit-op", "reason": "audit"},
+            )
+            resp = client.get("/api/v1/safety/audit?subject_prefix=safety.")
+        assert resp.status_code == 200
+        body = resp.json()
+        subjects = [r["subject"] for r in body["records"]]
+        assert "safety.estop.released" in subjects
+        assert "safety.estop.engaged" in subjects
+        assert body["total"] >= 2

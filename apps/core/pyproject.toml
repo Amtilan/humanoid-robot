@@ -18,6 +18,7 @@ dependencies = [
     "humanoid-robot-adapters-nats",
     "humanoid-robot-observability",
     "humanoid-robot-safety",
+    "aiosqlite>=0.20",
 ]
 
 [tool.uv.sources]

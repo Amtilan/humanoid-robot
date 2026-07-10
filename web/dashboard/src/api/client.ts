@@ -227,7 +227,28 @@ export const api = {
       "/api/v1/safety/watchdog/heartbeat",
       body,
     ),
+  safetyAudit: (params: { subject_prefix?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.subject_prefix) qs.set("subject_prefix", params.subject_prefix);
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return getJson<SafetyAuditPage>(`/api/v1/safety/audit${suffix}`);
+  },
 };
+
+export interface SafetyAuditRecord {
+  id: number;
+  occurred_at: string;
+  subject: string;
+  correlation_id: string;
+  producer: string;
+  payload: Record<string, unknown>;
+}
+
+export interface SafetyAuditPage {
+  total: number;
+  records: SafetyAuditRecord[];
+}
 
 export interface SafetyStatus {
   estop_engaged: boolean;

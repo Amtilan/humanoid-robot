@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -59,6 +59,12 @@ class SafetySettings(BaseModel):
     watchdog_check_interval_s: float = 1.0
     command_timeout_s: float = 3.0
     command_check_interval_s: float = 0.5
+    audit_db_path: Path = Path("var/safety_audit.sqlite")
+
+    @field_validator("audit_db_path", mode="before")
+    @classmethod
+    def _resolve_path(cls, value: str | Path) -> Path:
+        return Path(value)
 
 
 class CoreSettings(BaseSettings):

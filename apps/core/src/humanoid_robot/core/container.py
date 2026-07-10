@@ -30,6 +30,7 @@ from humanoid_robot.safety import (
     EStopState,
     KnownCapabilitiesPolicy,
     RateLimitPolicy,
+    SafetyAuditRecorder,
     SafetyGate,
     SafetyWatchdog,
 )
@@ -55,6 +56,7 @@ class AppContainer:
     safety_task: asyncio.Task[None] | None = field(default=None)
     safety_watchdog: SafetyWatchdog | None = field(default=None)
     safety_reconciler: CommandReconciler | None = field(default=None)
+    safety_audit: SafetyAuditRecorder | None = field(default=None)
     _manifest_subscription: Subscription | None = field(default=None)
 
     @classmethod
@@ -116,6 +118,9 @@ class AppContainer:
         )
         await safety_reconciler.start()
 
+        safety_audit = SafetyAuditRecorder(bus=bus, db_path=settings.safety.audit_db_path)
+        await safety_audit.start()
+
         return cls(
             settings=settings,
             event_bus=bus,
@@ -129,6 +134,7 @@ class AppContainer:
             safety_task=safety_task,
             safety_watchdog=safety_watchdog,
             safety_reconciler=safety_reconciler,
+            safety_audit=safety_audit,
             _manifest_subscription=manifest_subscription,
         )
 
@@ -138,6 +144,9 @@ class AppContainer:
         if self.diagnostics_ticker is not None:
             await self.diagnostics_ticker.stop()
             self.diagnostics_ticker = None
+        if self.safety_audit is not None:
+            await self.safety_audit.stop()
+            self.safety_audit = None
         if self.safety_reconciler is not None:
             await self.safety_reconciler.stop()
             self.safety_reconciler = None

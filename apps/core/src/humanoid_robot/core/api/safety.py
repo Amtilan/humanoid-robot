@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from humanoid_robot.core.container import AppContainer
 from humanoid_robot.domain.shared import new_correlation_id
 from humanoid_robot.events import SafetyWatchdogHeartbeat
 from humanoid_robot.events.base import EventMetadata
+from humanoid_robot.safety import AuditRecord
 
 router = APIRouter()
 
@@ -99,6 +100,30 @@ async def heartbeat(body: HeartbeatRequest, request: Request) -> HeartbeatRespon
         )
     )
     return HeartbeatResponse(accepted=True)
+
+
+class AuditResponse(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    total: int
+    records: list[AuditRecord]
+
+
+@router.get("/audit", response_model=AuditResponse)
+async def audit(
+    request: Request,
+    subject_prefix: str | None = Query(default=None, max_length=64),
+    since_iso: str | None = Query(default=None, max_length=32),
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> AuditResponse:
+    container: AppContainer = request.app.state.container
+    if container.safety_audit is None:
+        raise HTTPException(status_code=503, detail="audit recorder not initialised")
+    records = await container.safety_audit.query(
+        subject_prefix=subject_prefix, since_iso=since_iso, limit=limit
+    )
+    total = await container.safety_audit.count()
+    return AuditResponse(total=total, records=list(records))
 
 
 @router.post("/estop/engage", response_model=EStopResponse)
