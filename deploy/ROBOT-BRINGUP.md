@@ -1,0 +1,156 @@
+# Unitree G1 bring-up plan
+
+Grounded in a live SSH recon of the physical robot (`unitree@192.168.0.61`,
+2026-07-10). This is the plan to go from "platform builds + boots with
+mocks" to "platform runs on the real G1". Everything below the recon
+section is actionable, ordered by impact.
+
+---
+
+## 0. The robot as-found (recon facts)
+
+| Area | Reality on the device |
+|------|-----------------------|
+| Compute | Jetson Orin NX, **JetPack 5.1.1** (L4T R35.3.1), Ubuntu 20.04, aarch64 |
+| Resources | 8 cores, 15 Gi RAM, NVMe **428 G free** |
+| Host Python | 3.8 (irrelevant — our services are containerised) |
+| Unitree SDK | **C++ only** installed (`/usr/local/lib/libunitree_sdk2.a`, `~/unitree_sdk2`, `example/g1`); `master_service` running |
+| Unitree Python | **absent** — no `unitree_sdk2py`, no `cyclonedds` |
+| Robot control net | `eth10` = 192.168.123.164/24 (DDS plane to motors) |
+| WiFi | `wlan0` = 192.168.0.61/24, has real internet |
+| Egress | **broken** — `eth10` default (metric 20100) beats `wlan0` (20600), sends internet to the 192.168.123.1 dead-end |
+| Docker | 24.0.5 present, **`docker compose` plugin missing**, 0 images, `nvidia` runtime configured (not default) |
+| Audio | HDMI-out + Tegra APE only — **no USB mic/speaker**; PulseAudio running |
+| Access | sudo works (pw `123`); `unitree` not in docker group |
+
+**Validated during recon (reversible, robot left as-found):** adding
+`default via 192.168.0.1 dev wlan0 metric 50` fixes egress — `ghcr.io`
+resolves and our **arm64 base manifest returns HTTP 200**, so the GHCR
+pull path works from the robot once routed. Reverted immediately after.
+
+---
+
+## 1. Blockers to real operation (ranked)
+
+1. **Unitree Python SDK not present** — our adapter is Python; the robot
+   only has the C++ SDK. No `unitree_sdk2py`/`cyclonedds` → the adapter
+   can't drive motors, read IMU, or run the safety loop against real
+   hardware. *Highest impact: without this the robot only runs mock.*
+2. **No live end-to-end run** — the full path (route → pull → compose up
+   → verify) has never executed on the device.
+3. **Audio hardware** — no USB mic/speaker attached; voice pipeline is
+   dead until one is plugged in and routed through PulseAudio.
+4. **GPU inference unused** — runtime passes through, but CPU torch never
+   touches the iGPU (see [README](README.md) "Current CUDA status").
+
+Everything else (TLS, RBAC, log rotation) is polish, not a blocker.
+
+---
+
+## 2. Deploy strategy under the robot's constraints
+
+Two gaps break the documented pull-based deploy on this specific unit:
+
+- **`docker compose` plugin missing** → drop the arm64 plugin binary in
+  `/usr/local/lib/docker/cli-plugins/docker-compose` (one-time). Fold
+  this into `install-on-robot.sh` as a bootstrap step.
+- **Egress broken by routing** → two supported paths:
+  - **(A) Route fix** — `install-on-robot.sh` gains an opt-in
+    `--fix-egress` that adds the reversible `wlan0` default (metric 50),
+    pulls, then optionally restores. Keeps the offline-first ethos: the
+    fix is only up during the pull.
+  - **(B) True side-load** (fully offline) — on a machine with internet:
+    `docker save $(images) | gzip` → `scp` → `docker load` on the robot.
+    No robot routing change at all. Slower for the torch-heavy base over
+    WiFi, but the honest answer to the no-egress guarantee in
+    [humanoid-robot-deploy memory]. Ship a `deploy/scripts/sideload.sh`.
+
+Recommendation: implement both; default to (A) for convenience, document
+(B) for locked-down units.
+
+---
+
+## 3. The full проброс — phased
+
+### Phase A — infra bring-up (mock adapter, no motion) ✅ safe to run now
+1. `install-on-robot.sh` bootstraps compose plugin + (opt) `--fix-egress`.
+2. Pull `humanoid-robot-base` + `dashboard` (arm64, verified pullable).
+3. `docker compose up -d` with `HR_ROBOT_ADAPTER__ADAPTER_NAME=mock`.
+4. `verify-install.sh` — assert nats/core/adapter/dashboard/safety/
+   diagnostics all green on real hardware.
+5. Confirm the Jetson overlay lands `runtime: nvidia` on voice/rag
+   (probe already in `verify-install.sh`).
+
+**Exit criteria:** dashboard reachable on the robot, health ready, mock
+telemetry flowing. Zero motor commands.
+
+### Phase B — real Unitree adapter (the motion blocker)
+1. Package `unitree_sdk2py` + `cyclonedds` into an **arm64 adapter image
+   variant** (they're the missing runtime deps). Pin against the C++ SDK
+   already on the host, or vendor the `.a`.
+2. Container networking: adapter needs the **eth10 DDS domain** — run the
+   adapter with `network_mode: host` (or a macvlan on eth10) so DDS
+   multicast reaches the motor boards. Set `CYCLONEDDS_URI` to bind the
+   eth10 interface.
+3. Wire `_sdk.py` lazy loader to the real bindings; flip
+   `HR_ROBOT_ADAPTER__ADAPTER_NAME=unitree_g1_edu`.
+4. **Bench-test with the robot on a stand / e-stop in hand.** First only
+   read paths: IMU, battery, temperature, joint states — no actuation.
+5. Then low-risk actuation through the **safety gate** (R-phase gate is
+   fail-closed; `allowed_capabilities` excludes free locomotion by
+   default): `head.pose`, `hands.open/close`, `arms.gesture`. Verify the
+   gate blocks anything not whitelisted.
+6. Locomotion last, only after the gate + watchdog are proven, tethered.
+
+**Exit criteria:** real telemetry on the dashboard; a whitelisted gesture
+executes through the safety gate; a non-whitelisted command is rejected.
+
+### Phase C — voice
+1. Attach a USB mic/speaker (hardware task). Confirm `arecord -l` shows a
+   capture device.
+2. Route the voice container to PulseAudio (`--device /dev/snd` or the
+   Pulse socket) — the Unitree adapter already has `audio_in`/`audio_out`.
+3. `fetch-models.sh` (~9.5 G, fits the 428 G NVMe), enable `--profile voice`.
+4. Wake-word → ASR → intent → TTS loop end-to-end.
+
+### Phase D — GPU acceleration
+Pick one (see README "Current CUDA status"): bake CUDA llama.cpp +
+CTranslate2 into the CPU base (keeps Python 3.12), or a separate arm64
+inference sidecar on an L4T base with pinned Python 3.10, exposed over
+NATS. Only worth it once B+C work on CPU.
+
+---
+
+## 4. What's already built for this humanoid (Phase 0–9)
+
+- **Domain + event bus + safety gate** — fail-closed capability gate,
+  audit SQLite, watchdog. Plugin runtime with entry-point discovery.
+- **Robot adapter framework** — mock + a well-developed `unitree_g1`
+  adapter (head, hands, arms, locomotion, battery, temperature,
+  audio in/out, manifest) with a lazy real-SDK loader.
+- **Voice + RAG** — ASR/TTS/wake-word pipeline, grounded QA over Qdrant.
+- **Dashboard** — SPA with bearer auth + live WS event stream.
+- **Deploy (Phase 9, R1–R22):**
+  - Multi-arch (amd64+arm64) OCI images on GHCR, **cosign-signed**,
+    Trivy-scanned, SBOM'd; `.sig` visibility auto-flipped.
+  - **Fail-closed installer** — verifies signatures before pulling.
+  - Compose profiles (core / voice / rag / metrics); Jetson GPU overlay
+    + auto-detection.
+  - systemd units (hardened) + nightly backup timer + restore.
+  - Observability: Prometheus + Grafana + alertmanager with real
+    Slack/Discord/ntfy/webhook receivers.
+  - Bearer auth (HTTP + WS) with per-client failed-auth rate limiting.
+  - `install-on-robot.sh` / `verify-install.sh` / `fetch-models.sh` /
+    `backup.sh` / `restore.sh` / `verify-images.sh` — no git clone, no
+    dev toolchain on the robot.
+
+---
+
+## 5. Immediate next actions
+
+- [ ] `install-on-robot.sh`: bootstrap compose plugin if missing.
+- [ ] `install-on-robot.sh`: `--fix-egress` (reversible route) + document (B) side-load.
+- [ ] `deploy/scripts/sideload.sh` for fully-offline units.
+- [ ] Run **Phase A** on the robot (mock, no motion) and capture `verify-install.sh` output.
+- [ ] Build the arm64 adapter image variant with `unitree_sdk2py` + `cyclonedds` (Phase B step 1).
+- [ ] Hardware: attach USB audio for Phase C.
