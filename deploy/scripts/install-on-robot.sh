@@ -119,32 +119,57 @@ _online() {
     [[ "${code}" != "000" ]]
 }
 
-# If the current default route can't actually reach the internet, look
-# for another default-route interface that CAN and add a low-metric
-# default via it. Records the route in _EGRESS_ROUTE for revert_egress.
+# Ensure a genuinely-online interface owns the default route.
+#
+# The naive "if _online; skip" fast-path is unreliable on the G1:
+# systemd-resolved queries BOTH the wlan0 DNS and the eth10 (DDS) DNS,
+# so a single probe can resolve while the very next lookup fails —
+# resolution is only stable once wlan0 actually OWNS the default route
+# (resolved then prefers that link's DNS). So we FORCE a metric-50
+# default via the first default-route interface that can ping out,
+# unless that interface is already the winning default AND a probe
+# passes. The added route is recorded for revert_egress.
 fix_egress() {
-    if _online; then
-        echo "egress already works — no route change needed."
-        return 0
-    fi
-    echo "no egress via current default route; probing alternatives…"
-    # tuples: "<gw> <dev>" from every default route, tried low-metric first
+    # First default-route interface that can actually reach the internet.
+    local best_gw="" best_dev=""
     while read -r gw dev; do
         [[ -n "${gw}" && -n "${dev}" ]] || continue
         if timeout 6 ping -c1 -W2 -I "${dev}" 8.8.8.8 >/dev/null 2>&1; then  # pragma: allowlist secret
-            echo "  ${dev} (via ${gw}) has internet — adding metric-50 default"
-            if ip route add default via "${gw}" dev "${dev}" metric 50 2>/dev/null; then
-                _EGRESS_ROUTE="default via ${gw} dev ${dev} metric 50"
-                if _online; then
-                    echo "  egress restored via ${dev}."
-                    return 0
-                fi
-                echo "  route added but GHCR still unreachable; reverting." >&2
-                revert_egress
-            fi
+            best_gw="${gw}"; best_dev="${dev}"; break
         fi
     done < <(ip -o route show default | sed -n 's/.*via \([0-9.]*\) dev \([^ ]*\).*/\1 \2/p')
-    echo "could not establish egress automatically." >&2
+
+    local top_dev
+    top_dev=$(ip -o route show default | sed -n '1s/.*dev \([^ ]*\).*/\1/p')
+
+    if [[ -z "${best_dev}" ]]; then
+        # Nothing pings out; trust a probe in case egress works via a
+        # path we can't ICMP (some networks block ping).
+        if _online; then echo "egress works."; return 0; fi
+        echo "no online interface found among default routes." >&2
+        return 1
+    fi
+
+    if [[ "${best_dev}" == "${top_dev}" ]] && _online; then
+        echo "egress already works via ${best_dev} — no route change needed."
+        return 0
+    fi
+
+    echo "forcing metric-50 default via ${best_dev} (was shadowed by ${top_dev:-none})…"
+    ip route add default via "${best_gw}" dev "${best_dev}" metric 50 2>/dev/null || true
+    _EGRESS_ROUTE="default via ${best_gw} dev ${best_dev} metric 50"
+
+    # DNS needs a beat to re-home to the new default link; retry.
+    local i
+    for i in 1 2 3 4 5; do
+        if _online; then
+            echo "egress up via ${best_dev}."
+            return 0
+        fi
+        sleep 2
+    done
+    echo "route added but still no egress; reverting." >&2
+    revert_egress
     return 1
 }
 
