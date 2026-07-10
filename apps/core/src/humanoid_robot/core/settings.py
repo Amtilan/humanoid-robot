@@ -39,6 +39,20 @@ class ObservabilitySettings(BaseModel):
     tracing_enabled: bool = True
 
 
+class AuthSettings(BaseModel):
+    """Bearer-token gate on the HTTP + WebSocket surface.
+
+    Auth is **opt-in**: unset ``token`` (or set it empty) leaves the API
+    open exactly as before — same behaviour as every previous release,
+    same convenience for dev laptops.  Setting ``HR_AUTH__TOKEN=...``
+    switches every non-health `/api/v1/*` route to requiring
+    ``Authorization: Bearer <token>``, and the WS event stream to
+    accepting either that header or a ``?token=`` query arg.
+    """
+
+    token: str = ""
+
+
 class ActorBudget(BaseModel):
     """Sliding-window rate budget for a single submitter class."""
 
@@ -114,6 +128,7 @@ class CoreSettings(BaseSettings):
     http: HttpSettings = HttpSettings()
     nats: NatsSettings = NatsSettings()
     observability: ObservabilitySettings = ObservabilitySettings()
+    auth: AuthSettings = AuthSettings()
     safety: SafetySettings = SafetySettings()
 
     @classmethod

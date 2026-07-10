@@ -40,6 +40,7 @@ services:
       HR_NATS__SERVERS: '["nats://nats:4222"]'
       HR_OBSERVABILITY__LOG_LEVEL: "INFO"
       HR_OBSERVABILITY__TRACING_ENABLED: "false"
+      HR_AUTH__TOKEN: "${HR_AUTH__TOKEN:-}"
     env_file:
       - path: /etc/humanoid-robot/cortex-core.env
         required: false

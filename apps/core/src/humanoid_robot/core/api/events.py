@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
+from humanoid_robot.core.api.auth import enforce_ws_token
 from humanoid_robot.core.container import AppContainer
 from humanoid_robot.events import BaseEvent
 from humanoid_robot.observability import get_logger
@@ -30,8 +31,17 @@ async def events_ws(
     Every message sent to the browser is a single JSON object with
     ``subject``, ``event_id``, ``occurred_at``, and ``data`` fields.
     """
-    await websocket.accept()
     container: AppContainer = websocket.app.state.container
+    expected = container.settings.auth.token
+    if not enforce_ws_token(
+        expected,
+        header=websocket.headers.get("authorization"),
+        query_token=websocket.query_params.get("token"),
+    ):
+        # 4401 keeps it distinguishable from routing errors on the JS side.
+        await websocket.close(code=4401)
+        return
+    await websocket.accept()
     bus: EventBusPort = container.event_bus
 
     queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=256)

@@ -1,9 +1,72 @@
-async function getJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, { headers: { accept: "application/json" } });
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText} for ${url}`);
+// --- Bearer token wiring ----------------------------------------------
+// The operator saves the token via the "Sign in" prompt (auth.ts). This
+// module keeps every fetch in step and exposes an unauthorized() signal
+// so React screens can pop the prompt when the API starts returning 401.
+
+const AUTH_STORAGE_KEY = "humanoid-robot.auth.token";
+let cachedToken: string | null = null;
+const unauthorizedListeners = new Set<() => void>();
+
+export function getAuthToken(): string | null {
+  if (cachedToken !== null) return cachedToken;
+  try {
+    cachedToken = localStorage.getItem(AUTH_STORAGE_KEY);
+  } catch {
+    cachedToken = null;
   }
-  return (await response.json()) as T;
+  return cachedToken;
+}
+
+export function setAuthToken(token: string | null): void {
+  cachedToken = token;
+  try {
+    if (token) localStorage.setItem(AUTH_STORAGE_KEY, token);
+    else localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch {
+    // localStorage may be blocked; the in-memory cache still works for
+    // this session.
+  }
+}
+
+export function onUnauthorized(fn: () => void): () => void {
+  unauthorizedListeners.add(fn);
+  return () => {
+    unauthorizedListeners.delete(fn);
+  };
+}
+
+function fireUnauthorized(): void {
+  for (const fn of unauthorizedListeners) {
+    try {
+      fn();
+    } catch (err) {
+      console.error("unauthorized listener threw", err);
+    }
+  }
+}
+
+function authHeader(): Record<string, string> {
+  const token = getAuthToken();
+  return token ? { authorization: `Bearer ${token}` } : {};
+}
+
+async function guard<T>(response: Response, url: string, fallback: () => Promise<T>): Promise<T> {
+  if (response.status === 401) {
+    fireUnauthorized();
+    throw new Error(`401 unauthorized for ${url}`);
+  }
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`${response.status} ${response.statusText}: ${detail || url}`);
+  }
+  return fallback();
+}
+
+async function getJson<T>(url: string): Promise<T> {
+  const response = await fetch(url, {
+    headers: { accept: "application/json", ...authHeader() },
+  });
+  return guard(response, url, async () => (await response.json()) as T);
 }
 
 async function postJson<T, B = unknown>(url: string, body?: B): Promise<T> {
@@ -12,14 +75,23 @@ async function postJson<T, B = unknown>(url: string, body?: B): Promise<T> {
     headers: {
       "content-type": "application/json",
       accept: "application/json",
+      ...authHeader(),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`${response.status} ${response.statusText}: ${detail}`);
-  }
-  return (await response.json()) as T;
+  return guard(response, url, async () => (await response.json()) as T);
+}
+
+async function deleteJson<T = void>(url: string): Promise<T> {
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: { accept: "application/json", ...authHeader() },
+  });
+  return guard(response, url, async () => {
+    if (response.status === 204) return undefined as T;
+    const text = await response.text();
+    return (text ? JSON.parse(text) : undefined) as T;
+  });
 }
 
 // -----------------------------------------------------------------------
@@ -182,14 +254,6 @@ export interface IngestJobStatus {
   exit_code: number | null;
   stdout_tail: string | null;
   stderr_tail: string | null;
-}
-
-async function deleteJson(url: string): Promise<void> {
-  const response = await fetch(url, { method: "DELETE" });
-  if (!response.ok && response.status !== 204) {
-    const detail = await response.text();
-    throw new Error(`${response.status} ${response.statusText}: ${detail}`);
-  }
 }
 
 export const api = {

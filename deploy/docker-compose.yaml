@@ -39,6 +39,8 @@ services:
       HR_NATS__SERVERS: '["nats://nats:4222"]'
       HR_OBSERVABILITY__LOG_LEVEL: "INFO"
       HR_OBSERVABILITY__TRACING_ENABLED: "false"
+      # Bearer auth on /api/v1/*: unset = open, set = required.
+      HR_AUTH__TOKEN: "${HR_AUTH__TOKEN:-}"
     ports:
       - "127.0.0.1:8080:8080"
     healthcheck:

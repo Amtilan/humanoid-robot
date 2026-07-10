@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from humanoid_robot.core.api import router as api_router
+from humanoid_robot.core.api.auth import BearerAuthMiddleware
 from humanoid_robot.core.container import AppContainer
 from humanoid_robot.core.settings import CoreSettings
 from humanoid_robot.observability import (
@@ -52,6 +53,9 @@ def create_app(settings: CoreSettings) -> FastAPI:
         # openapi is enabled by default; we override tag descriptions.
         openapi_tags=[{"name": "system", "description": "Health and metadata."}],
     )
+    if settings.auth.token:
+        app.add_middleware(BearerAuthMiddleware, token=settings.auth.token)
+        log.info("cortex-core.auth_enabled")
     app.include_router(api_router, prefix="/api/v1")
     _mount_metrics(app)
     return app

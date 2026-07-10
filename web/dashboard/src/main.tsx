@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 
 import { App } from "./App";
+import { AuthPrompt } from "./lib/authPrompt";
 import { BusToastBridge } from "./lib/busToasts";
 import { EventStreamProvider } from "./lib/eventStream";
 import { ToastProvider } from "./lib/toast";
@@ -29,6 +30,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <BrowserRouter>
             <App />
           </BrowserRouter>
+          <AuthPrompt />
         </ToastProvider>
       </EventStreamProvider>
     </QueryClientProvider>

@@ -8,6 +8,8 @@ import {
   useState,
 } from "react";
 
+import { getAuthToken } from "../api/client";
+
 export interface EventEnvelope {
   subject: string;
   event_id: string;
@@ -41,7 +43,11 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
 
     const connect = () => {
       const proto = location.protocol === "https:" ? "wss" : "ws";
-      const url = `${proto}://${location.host}/api/v1/events/ws?subject=>`;
+      // Browsers cannot set custom headers on WebSocket connections, so the
+      // token rides as a `?token=` query arg (cortex-core accepts either).
+      const token = getAuthToken();
+      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
+      const url = `${proto}://${location.host}/api/v1/events/ws?subject=>${tokenParam}`;
       const ws = new WebSocket(url);
       socketRef.current = ws;
 
