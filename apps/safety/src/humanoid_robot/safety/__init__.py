@@ -14,6 +14,7 @@ from humanoid_robot.safety.policies import (
     RateLimitPolicy,
     VelocityLimitPolicy,
 )
+from humanoid_robot.safety.overheat_monitor import OverheatMonitor
 from humanoid_robot.safety.reconciler import CommandReconciler
 from humanoid_robot.safety.tilt_monitor import TiltMonitor
 from humanoid_robot.safety.watchdog import SafetyWatchdog
@@ -27,6 +28,7 @@ __all__ = [
     "EStopPolicy",
     "EStopState",
     "KnownCapabilitiesPolicy",
+    "OverheatMonitor",
     "PayloadSchemaPolicy",
     "PerActorRateLimitPolicy",
     "RateLimitPolicy",

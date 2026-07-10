@@ -83,6 +83,7 @@ class SafetySettings(BaseModel):
     audit_rotation_interval_s: float = 3_600.0
     tilt_max_pitch_rad: float = 0.6
     tilt_max_roll_rad: float = 0.6
+    max_temperature_c: float = 85.0
     max_linear_speed_mps: float = 0.5
     max_angular_rate_rps: float = 1.0
 

@@ -31,6 +31,7 @@ from humanoid_robot.safety import (
     EStopPolicy,
     EStopState,
     KnownCapabilitiesPolicy,
+    OverheatMonitor,
     PayloadSchemaPolicy,
     PerActorRateLimitPolicy,
     RateLimitPolicy,
@@ -64,6 +65,7 @@ class AppContainer:
     safety_reconciler: CommandReconciler | None = field(default=None)
     safety_audit: SafetyAuditRecorder | None = field(default=None)
     safety_tilt_monitor: TiltMonitor | None = field(default=None)
+    safety_overheat_monitor: OverheatMonitor | None = field(default=None)
     robot_telemetry_cache: RobotTelemetryCache = field(default_factory=RobotTelemetryCache)
     _manifest_subscription: Subscription | None = field(default=None)
     _telemetry_subscription: Subscription | None = field(default=None)
@@ -163,6 +165,13 @@ class AppContainer:
         )
         await tilt_monitor.start()
 
+        overheat_monitor = OverheatMonitor(
+            gate=safety_gate,
+            bus=bus,
+            max_temperature_c=settings.safety.max_temperature_c,
+        )
+        await overheat_monitor.start()
+
         return cls(
             settings=settings,
             event_bus=bus,
@@ -178,6 +187,7 @@ class AppContainer:
             safety_reconciler=safety_reconciler,
             safety_audit=safety_audit,
             safety_tilt_monitor=tilt_monitor,
+            safety_overheat_monitor=overheat_monitor,
             robot_telemetry_cache=telemetry_cache,
             _manifest_subscription=manifest_subscription,
             _telemetry_subscription=telemetry_subscription,
@@ -186,9 +196,20 @@ class AppContainer:
     async def close(self) -> None:
         """Release resources; safe to call multiple times."""
         await self.plugin_manager.deactivate_all()
+        await self._close_periodic_workers()
+        await self._close_safety_stack()
+        await self._close_bus_subscriptions()
+        await self.event_bus.close()
+
+    async def _close_periodic_workers(self) -> None:
         if self.diagnostics_ticker is not None:
             await self.diagnostics_ticker.stop()
             self.diagnostics_ticker = None
+
+    async def _close_safety_stack(self) -> None:
+        if self.safety_overheat_monitor is not None:
+            await self.safety_overheat_monitor.stop()
+            self.safety_overheat_monitor = None
         if self.safety_tilt_monitor is not None:
             await self.safety_tilt_monitor.stop()
             self.safety_tilt_monitor = None
@@ -208,6 +229,8 @@ class AppContainer:
                 await self.safety_task
             self.safety_task = None
         self.safety_gate = None
+
+    async def _close_bus_subscriptions(self) -> None:
         if self._telemetry_subscription is not None:
             with contextlib.suppress(Exception):
                 await self._telemetry_subscription.cancel()
@@ -216,4 +239,3 @@ class AppContainer:
             with contextlib.suppress(Exception):
                 await self._manifest_subscription.cancel()
             self._manifest_subscription = None
-        await self.event_bus.close()

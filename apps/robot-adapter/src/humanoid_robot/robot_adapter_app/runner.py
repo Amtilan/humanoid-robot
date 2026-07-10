@@ -25,6 +25,7 @@ from humanoid_robot.robot_adapter_app.telemetry_pump import (
     TelemetryPump,
     battery_source,
     imu_source,
+    temperature_source,
 )
 
 
@@ -119,6 +120,9 @@ class AdapterRunner:
         imu = getattr(adapter, "imu", None)
         if imu is not None and hasattr(imu, "read"):
             telemetry.register(imu_source(imu))
+        temperature = getattr(adapter, "temperature", None)
+        if temperature is not None and hasattr(temperature, "read"):
+            telemetry.register(temperature_source(temperature))
         await telemetry.start()
         self._telemetry = telemetry
 

@@ -22,6 +22,7 @@ from humanoid_robot.adapters.unitree_g1.imu import UnitreeG1Imu
 from humanoid_robot.adapters.unitree_g1.locomotion import UnitreeG1LocomotionAdapter
 from humanoid_robot.adapters.unitree_g1.manifest import build_manifest
 from humanoid_robot.adapters.unitree_g1.sdk import require_sdk
+from humanoid_robot.adapters.unitree_g1.temperature import UnitreeG1Temperature
 from humanoid_robot.domain.robot import RobotCapabilities, RobotManifest
 
 _LOG = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ class UnitreeG1Adapter:
     _arm: UnitreeG1Arm | None = None
     _battery: UnitreeG1Battery | None = None
     _imu: UnitreeG1Imu | None = None
+    _temperature: UnitreeG1Temperature | None = None
     _audio_in: UnitreeG1AudioIn | None = None
     _audio_out: UnitreeG1AudioOut | None = None
 
@@ -64,6 +66,7 @@ class UnitreeG1Adapter:
         self._imu = None
         self._audio_in = None
         self._audio_out = None
+        self._temperature = None
 
     @classmethod
     def from_settings(cls, settings: UnitreeG1Settings) -> Self:
@@ -78,6 +81,7 @@ class UnitreeG1Adapter:
         obj._imu = None
         obj._audio_in = None
         obj._audio_out = None
+        obj._temperature = None
         return obj
 
     # ---- RobotAdapterPort ---------------------------------------------------
@@ -178,6 +182,21 @@ class UnitreeG1Adapter:
             msg = "imu source must be a zero-arg callable"
             raise TypeError(msg)
         self._imu = UnitreeG1Imu(source=source)  # type: ignore[arg-type]
+
+    @property
+    def temperature(self) -> UnitreeG1Temperature:
+        if self._temperature is None:
+            self._temperature = UnitreeG1Temperature()
+        return self._temperature
+
+    def attach_temperature_source(self, source: object) -> None:
+        """Test hook: inject a callable that reports temperature zones."""
+        from collections.abc import Callable as _Callable
+
+        if not isinstance(source, _Callable):  # type: ignore[arg-type]
+            msg = "temperature source must be a zero-arg callable"
+            raise TypeError(msg)
+        self._temperature = UnitreeG1Temperature(source=source)  # type: ignore[arg-type]
 
     @property
     def audio_in(self) -> UnitreeG1AudioIn:

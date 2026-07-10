@@ -51,6 +51,16 @@ export function RobotPage() {
     battery && typeof battery.payload.percentage === "number"
       ? (battery.payload.percentage as number)
       : null;
+  const temperature = telemetryQuery.data?.find((s) => s.kind === "temperature");
+  const tempMax =
+    temperature && typeof temperature.payload === "object" && temperature.payload !== null
+      ? Math.max(
+          ...Object.values(temperature.payload as Record<string, unknown>).filter(
+            (v): v is number => typeof v === "number",
+          ),
+          0,
+        )
+      : null;
   const imu = telemetryQuery.data?.find((s) => s.kind === "imu");
   const imuPitch =
     imu && typeof imu.payload.pitch_rad === "number"
@@ -96,6 +106,7 @@ export function RobotPage() {
           </p>
         </div>
         <div className="flex items-start gap-3">
+          {tempMax !== null && tempMax > 0 && <TemperatureBadge celsius={tempMax} />}
           {(imuPitch !== null || imuRoll !== null) && (
             <ImuBadge pitchRad={imuPitch} rollRad={imuRoll} />
           )}
@@ -273,6 +284,21 @@ function Info({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div className="font-mono">{value}</div>
+    </div>
+  );
+}
+
+function TemperatureBadge({ celsius }: { celsius: number }) {
+  const style =
+    celsius >= 85
+      ? "border-red-500/50 bg-red-500/10 text-red-300"
+      : celsius >= 70
+        ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-300"
+        : "border-emerald-500/50 bg-emerald-500/10 text-emerald-300";
+  return (
+    <div className={`rounded-lg border ${style} px-3 py-2 text-xs`}>
+      <div className="text-[10px] uppercase tracking-wide opacity-80">Temp max</div>
+      <div className="font-mono">{celsius.toFixed(1)}°C</div>
     </div>
   );
 }
