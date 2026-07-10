@@ -269,8 +269,14 @@ jobs:
       matrix:
         image:
           - name: humanoid-robot-base
+            platform: linux/amd64
           - name: humanoid-robot-dashboard
+            platform: linux/amd64
           - name: humanoid-robot-adapter-unitree
+            # arm64-only image — scanning it on the amd64 runner requires
+            # an explicit platform or Trivy 404s on a nonexistent amd64
+            # variant.
+            platform: linux/arm64
     steps:
       - uses: actions/checkout@v4
 
@@ -297,6 +303,11 @@ jobs:
 
       - name: Trivy CVE scan → SARIF
         uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          # Pin the arch Trivy resolves from the image index. Docker can
+          # pull a foreign-arch image for inspection even on an amd64
+          # runner; this just tells Trivy which sub-manifest to read.
+          TRIVY_PLATFORM: ${{ matrix.image.platform }}
         with:
           image-ref: ${{ steps.ref.outputs.image }}
           format: sarif
@@ -308,6 +319,8 @@ jobs:
 
       - name: Trivy CVE scan → summary table
         uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          TRIVY_PLATFORM: ${{ matrix.image.platform }}
         with:
           image-ref: ${{ steps.ref.outputs.image }}
           format: table
@@ -343,8 +356,11 @@ jobs:
       matrix:
         image:
           - name: humanoid-robot-base
+            platform: linux/amd64
           - name: humanoid-robot-dashboard
+            platform: linux/amd64
           - name: humanoid-robot-adapter-unitree
+            platform: linux/arm64
     steps:
       - name: Normalise owner
         run: |
@@ -365,13 +381,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Pull the platform-specific image into the local docker daemon so
+      # syft reads it from there instead of re-resolving the index (which
+      # 404s for the arm64-only adapter on the amd64 runner). Foreign-arch
+      # pulls are fine for inspection — we never run the image.
+      - name: Pre-pull image (${{ matrix.image.platform }})
+        run: |
+          docker pull --platform ${{ matrix.image.platform }} \
+              "${{ steps.ref.outputs.image }}"
+
       - name: Generate SBOM
-        uses: anchore/sbom-action@v0
+        env:
+          SYFT_PLATFORM: ${{ matrix.image.platform }}
         with:
           image: ${{ steps.ref.outputs.image }}
           format: spdx-json
           output-file: sbom-${{ matrix.image.name }}.spdx.json
           upload-artifact: false
+        uses: anchore/sbom-action@v0
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
