@@ -51,6 +51,15 @@ export function RobotPage() {
     battery && typeof battery.payload.percentage === "number"
       ? (battery.payload.percentage as number)
       : null;
+  const imu = telemetryQuery.data?.find((s) => s.kind === "imu");
+  const imuPitch =
+    imu && typeof imu.payload.pitch_rad === "number"
+      ? (imu.payload.pitch_rad as number)
+      : null;
+  const imuRoll =
+    imu && typeof imu.payload.roll_rad === "number"
+      ? (imu.payload.roll_rad as number)
+      : null;
 
   const { push } = useToast();
   const [submitter, setSubmitter] = useState("operator");
@@ -86,7 +95,12 @@ export function RobotPage() {
             Latest manifest reported by each adapter on the bus.
           </p>
         </div>
-        {batteryPct !== null && <BatteryBadge percentage={batteryPct} />}
+        <div className="flex items-start gap-3">
+          {(imuPitch !== null || imuRoll !== null) && (
+            <ImuBadge pitchRad={imuPitch} rollRad={imuRoll} />
+          )}
+          {batteryPct !== null && <BatteryBadge percentage={batteryPct} />}
+        </div>
       </div>
 
       <div className="rounded-lg border border-border bg-background/40 p-4">
@@ -259,6 +273,32 @@ function Info({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div className="font-mono">{value}</div>
+    </div>
+  );
+}
+
+function ImuBadge({
+  pitchRad,
+  rollRad,
+}: {
+  pitchRad: number | null;
+  rollRad: number | null;
+}) {
+  const pitchDeg = pitchRad !== null ? (pitchRad * 180) / Math.PI : null;
+  const rollDeg = rollRad !== null ? (rollRad * 180) / Math.PI : null;
+  const worst = Math.max(Math.abs(pitchDeg ?? 0), Math.abs(rollDeg ?? 0));
+  const style =
+    worst >= 30
+      ? "border-red-500/50 bg-red-500/10 text-red-300"
+      : worst >= 20
+        ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-300"
+        : "border-emerald-500/50 bg-emerald-500/10 text-emerald-300";
+  return (
+    <div className={`rounded-lg border ${style} px-3 py-2 text-xs`}>
+      <div className="text-[10px] uppercase tracking-wide opacity-80">IMU tilt</div>
+      <div className="font-mono">
+        pitch {pitchDeg?.toFixed(1) ?? "—"}° · roll {rollDeg?.toFixed(1) ?? "—"}°
+      </div>
     </div>
   );
 }

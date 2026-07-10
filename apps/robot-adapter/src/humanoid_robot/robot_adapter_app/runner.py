@@ -24,6 +24,7 @@ from humanoid_robot.robot_adapter_app.settings import RobotAdapterSettings
 from humanoid_robot.robot_adapter_app.telemetry_pump import (
     TelemetryPump,
     battery_source,
+    imu_source,
 )
 
 
@@ -115,6 +116,9 @@ class AdapterRunner:
         battery = _resolve_battery(adapter)
         if battery is not None:
             telemetry.register(battery_source(battery))
+        imu = getattr(adapter, "imu", None)
+        if imu is not None and hasattr(imu, "read"):
+            telemetry.register(imu_source(imu))
         await telemetry.start()
         self._telemetry = telemetry
 

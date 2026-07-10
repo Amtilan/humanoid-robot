@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from humanoid_robot.adapters.unitree_g1.arm import UnitreeG1Arm
 from humanoid_robot.adapters.unitree_g1.battery import UnitreeG1Battery
+from humanoid_robot.adapters.unitree_g1.imu import UnitreeG1Imu
 from humanoid_robot.adapters.unitree_g1.locomotion import UnitreeG1LocomotionAdapter
 from humanoid_robot.adapters.unitree_g1.manifest import build_manifest
 from humanoid_robot.adapters.unitree_g1.sdk import require_sdk
@@ -45,6 +46,7 @@ class UnitreeG1Adapter:
     _locomotion: UnitreeG1LocomotionAdapter | None = None
     _arm: UnitreeG1Arm | None = None
     _battery: UnitreeG1Battery | None = None
+    _imu: UnitreeG1Imu | None = None
 
     def __init__(self, **kwargs: object) -> None:
         # Adapter registry passes kwargs; validate through the settings model.
@@ -55,6 +57,7 @@ class UnitreeG1Adapter:
         self._locomotion = None
         self._arm = None
         self._battery = None
+        self._imu = None
 
     @classmethod
     def from_settings(cls, settings: UnitreeG1Settings) -> Self:
@@ -151,3 +154,18 @@ class UnitreeG1Adapter:
             msg = "battery source must be a zero-arg callable"
             raise TypeError(msg)
         self._battery = UnitreeG1Battery(source=source)  # type: ignore[arg-type]
+
+    @property
+    def imu(self) -> UnitreeG1Imu:
+        if self._imu is None:
+            self._imu = UnitreeG1Imu()
+        return self._imu
+
+    def attach_imu_source(self, source: object) -> None:
+        """Test hook: inject a callable that reports IMU samples."""
+        from collections.abc import Callable as _Callable
+
+        if not isinstance(source, _Callable):  # type: ignore[arg-type]
+            msg = "imu source must be a zero-arg callable"
+            raise TypeError(msg)
+        self._imu = UnitreeG1Imu(source=source)  # type: ignore[arg-type]

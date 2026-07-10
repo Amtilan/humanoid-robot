@@ -37,6 +37,7 @@ from humanoid_robot.safety import (
     SafetyAuditRecorder,
     SafetyGate,
     SafetyWatchdog,
+    TiltMonitor,
     VelocityLimitPolicy,
 )
 
@@ -62,6 +63,7 @@ class AppContainer:
     safety_watchdog: SafetyWatchdog | None = field(default=None)
     safety_reconciler: CommandReconciler | None = field(default=None)
     safety_audit: SafetyAuditRecorder | None = field(default=None)
+    safety_tilt_monitor: TiltMonitor | None = field(default=None)
     robot_telemetry_cache: RobotTelemetryCache = field(default_factory=RobotTelemetryCache)
     _manifest_subscription: Subscription | None = field(default=None)
     _telemetry_subscription: Subscription | None = field(default=None)
@@ -153,6 +155,14 @@ class AppContainer:
         )
         await safety_audit.start()
 
+        tilt_monitor = TiltMonitor(
+            gate=safety_gate,
+            bus=bus,
+            max_pitch_rad=settings.safety.tilt_max_pitch_rad,
+            max_roll_rad=settings.safety.tilt_max_roll_rad,
+        )
+        await tilt_monitor.start()
+
         return cls(
             settings=settings,
             event_bus=bus,
@@ -167,6 +177,7 @@ class AppContainer:
             safety_watchdog=safety_watchdog,
             safety_reconciler=safety_reconciler,
             safety_audit=safety_audit,
+            safety_tilt_monitor=tilt_monitor,
             robot_telemetry_cache=telemetry_cache,
             _manifest_subscription=manifest_subscription,
             _telemetry_subscription=telemetry_subscription,
@@ -178,6 +189,9 @@ class AppContainer:
         if self.diagnostics_ticker is not None:
             await self.diagnostics_ticker.stop()
             self.diagnostics_ticker = None
+        if self.safety_tilt_monitor is not None:
+            await self.safety_tilt_monitor.stop()
+            self.safety_tilt_monitor = None
         if self.safety_audit is not None:
             await self.safety_audit.stop()
             self.safety_audit = None

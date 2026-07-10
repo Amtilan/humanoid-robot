@@ -33,6 +33,20 @@ def battery_source(port: BatteryPort) -> TelemetrySource:
     return _sample
 
 
+def imu_source(reader: object) -> TelemetrySource:
+    """Wraps any object with an async ``read() -> dict[str, float]`` method."""
+
+    async def _sample() -> TelemetrySample | None:
+        read = reader.read  # type: ignore[attr-defined]
+        payload = await read()
+        if not isinstance(payload, dict):
+            return None
+        cleaned: dict[str, object] = {k: v for k, v in payload.items() if isinstance(k, str)}
+        return ("imu", cleaned)
+
+    return _sample
+
+
 @dataclass(slots=True)
 class TelemetryPump:
     """Polls each source on a fixed interval and publishes RobotTelemetry."""
