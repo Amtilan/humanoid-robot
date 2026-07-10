@@ -17,6 +17,8 @@ from humanoid_robot.domain.robot.commands import (
     HeadPoseCommand,
     MoveCommand,
     MoveOutcome,
+    PostureCommand,
+    PostureKind,
     RobotCommandResult,
     StopCommand,
 )
@@ -33,6 +35,8 @@ __all__ = [
     "LocomotionKind",
     "MoveCommand",
     "MoveOutcome",
+    "PostureCommand",
+    "PostureKind",
     "RobotCapabilities",
     "RobotCommandResult",
     "RobotManifest",

@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from humanoid_robot.domain.robot import (
     HeadPoseCommand,
     MoveCommand,
+    PostureCommand,
     RobotCapabilities,
     RobotCommandResult,
     RobotManifest,
@@ -81,6 +82,13 @@ class HandPort(Protocol):
     async def close(self) -> RobotCommandResult: ...
 
     async def set_positions(self, positions: tuple[float, ...]) -> RobotCommandResult: ...
+
+
+@runtime_checkable
+class PosturePort(Protocol):
+    """Whole-body posture / locomotion-FSM transitions (damp, stand, …)."""
+
+    async def set_posture(self, cmd: PostureCommand) -> RobotCommandResult: ...
 
 
 @runtime_checkable

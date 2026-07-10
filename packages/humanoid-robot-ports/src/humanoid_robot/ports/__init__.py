@@ -28,6 +28,7 @@ from humanoid_robot.ports.robot import (
     HandPort,
     HeadPort,
     LocomotionPort,
+    PosturePort,
     RobotAdapterPort,
 )
 from humanoid_robot.ports.safety import (
@@ -63,6 +64,7 @@ __all__ = [
     "LlmRequest",
     "LlmResponse",
     "LocomotionPort",
+    "PosturePort",
     "RerankerPort",
     "RetrievalQuery",
     "RobotAdapterPort",

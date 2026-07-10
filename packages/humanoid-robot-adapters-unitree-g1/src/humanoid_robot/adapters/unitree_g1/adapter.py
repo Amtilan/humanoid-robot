@@ -24,6 +24,7 @@ from humanoid_robot.adapters.unitree_g1.imu import UnitreeG1Imu
 from humanoid_robot.adapters.unitree_g1.locomotion import UnitreeG1LocomotionAdapter
 from humanoid_robot.adapters.unitree_g1.lowstate import G1LowStateReader
 from humanoid_robot.adapters.unitree_g1.manifest import build_manifest
+from humanoid_robot.adapters.unitree_g1.posture import UnitreeG1Posture
 from humanoid_robot.adapters.unitree_g1.sdk import require_sdk
 from humanoid_robot.adapters.unitree_g1.temperature import UnitreeG1Temperature
 from humanoid_robot.domain.robot import RobotCapabilities, RobotManifest
@@ -50,6 +51,7 @@ class UnitreeG1Adapter:
     _started: bool = False
     _start_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     _locomotion: UnitreeG1LocomotionAdapter | None = None
+    _posture: UnitreeG1Posture | None = None
     _arm: UnitreeG1Arm | None = None
     _head: UnitreeG1Head | None = None
     _hand: UnitreeG1Hand | None = None
@@ -67,6 +69,7 @@ class UnitreeG1Adapter:
         self._started = False
         self._start_lock = asyncio.Lock()
         self._locomotion = None
+        self._posture = None
         self._arm = None
         self._battery = None
         self._imu = None
@@ -85,6 +88,7 @@ class UnitreeG1Adapter:
         obj._started = False
         obj._start_lock = asyncio.Lock()
         obj._locomotion = None
+        obj._posture = None
         obj._arm = None
         obj._battery = None
         obj._imu = None
@@ -172,6 +176,16 @@ class UnitreeG1Adapter:
     def attach_locomotion_client(self, client: object) -> None:
         """Test hook: inject a fake LocoClient before dispatching commands."""
         self._locomotion = UnitreeG1LocomotionAdapter(client=client)
+
+    @property
+    def posture(self) -> UnitreeG1Posture:
+        if self._posture is None:
+            self._posture = UnitreeG1Posture()
+        return self._posture
+
+    def attach_posture_client(self, client: object) -> None:
+        """Test hook: inject a fake LocoClient for posture transitions."""
+        self._posture = UnitreeG1Posture(client=client)
 
     @property
     def arm(self) -> UnitreeG1Arm:

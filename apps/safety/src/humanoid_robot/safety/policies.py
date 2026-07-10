@@ -14,7 +14,12 @@ from dataclasses import dataclass, field
 
 from pydantic import BaseModel, Field, ValidationError
 
-from humanoid_robot.domain.robot import HeadPoseCommand, MoveCommand, StopCommand
+from humanoid_robot.domain.robot import (
+    HeadPoseCommand,
+    MoveCommand,
+    PostureCommand,
+    StopCommand,
+)
 from humanoid_robot.ports import SafetyDecision, SafetyPolicyPort, SafetyRequest
 from humanoid_robot.safety.estop import EStopState
 
@@ -86,6 +91,7 @@ class ArmGesturePayload(BaseModel):
 DEFAULT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "locomotion.move": MoveCommand,
     "locomotion.stop": StopCommand,
+    "locomotion.posture": PostureCommand,
     "arms.gesture": ArmGesturePayload,
     "head.pose": HeadPoseCommand,
 }

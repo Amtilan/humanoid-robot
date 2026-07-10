@@ -89,6 +89,7 @@ class SafetySettings(BaseModel):
         "head.pose",
         "head.reset",
         "locomotion.move",
+        "locomotion.posture",
         "locomotion.stop",
         "voice.speak",
     )

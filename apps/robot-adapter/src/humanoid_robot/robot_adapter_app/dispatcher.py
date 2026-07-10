@@ -21,6 +21,7 @@ from humanoid_robot.domain.robot import (
     HeadPoseCommand,
     MoveCommand,
     MoveOutcome,
+    PostureCommand,
     RobotCommandResult,
     StopCommand,
 )
@@ -38,6 +39,7 @@ from humanoid_robot.ports import (
     HandPort,
     HeadPort,
     LocomotionPort,
+    PosturePort,
     Subscription,
 )
 
@@ -68,6 +70,12 @@ class CommandDispatcher:
 
         self.register("locomotion.move", _move)
         self.register("locomotion.stop", _stop)
+
+    def register_posture(self, posture: PosturePort) -> None:
+        async def _posture(payload: dict[str, object]) -> RobotCommandResult:
+            return await posture.set_posture(PostureCommand.model_validate(payload))
+
+        self.register("locomotion.posture", _posture)
 
     def register_arm(self, arm: ArmPort) -> None:
         async def _gesture(payload: dict[str, object]) -> RobotCommandResult:
