@@ -153,6 +153,7 @@ class UnitreeG1Adapter:
         # `source` makes `read()` return the latest decoded DDS frame.
         self.imu.source = reader.imu_sample
         self.temperature.source = reader.temperature_sample
+        self.battery.source = reader.battery_percentage
         _LOG.info("unitree_g1.lowstate_subscribed")
 
     # ---- Sub-ports -----------------------------------------------------------

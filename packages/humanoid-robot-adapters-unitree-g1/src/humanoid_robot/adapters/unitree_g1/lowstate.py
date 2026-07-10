@@ -1,21 +1,20 @@
-"""DDS ``rt/lowstate`` subscriber — feeds the IMU + temperature ports.
+"""DDS state subscribers — feed the IMU / temperature / battery ports.
 
-The G1 publishes ``unitree_hg`` ``LowState_`` on ``rt/lowstate`` at ~500 Hz:
-IMU (quaternion / gyro / accel / rpy / board temp) and per-motor state
-(including winding temperatures).  We subscribe once, decode each frame
-into plain dicts, and cache the latest under a lock.
+The G1 publishes two low-rate state topics we care about:
+  * ``rt/lowstate`` (``unitree_hg LowState_``) — IMU (quaternion / gyro /
+    accel / rpy / board temp) and per-motor state (winding temperatures).
+  * ``rt/lf/bmsstate`` (``unitree_hg BmsState_``) — battery ``soc`` (0-100),
+    soh, voltage, current.  ``LowState_`` itself carries no BMS field, so
+    the SOC lives on this separate topic (confirmed live on the robot:
+    ``rt/lf/bmsstate`` → soc=87).
 
 Bridging note: the SDK delivers frames on its own DDS thread, while the
 telemetry pump reads on the asyncio loop.  Rather than hop threads with
 ``run_coroutine_threadsafe`` we expose plain *sync* getters and wire them
 into the ports' ``source`` hook — ``UnitreeG1Imu.read()`` /
-``UnitreeG1Temperature.read()`` already call ``source()`` synchronously,
-so the only shared state is the guarded ``dict`` and there's no async
-hand-off.
-
-Battery SOC is deliberately absent: ``unitree_hg`` ``LowState_`` carries
-no BMS field, so the battery port stays sourceless (reports 0.0) until a
-dedicated BMS topic is wired.
+``UnitreeG1Temperature.read()`` / ``UnitreeG1Battery.read_percentage()``
+already call ``source()`` synchronously, so the only shared state is a
+lock-guarded snapshot and there's no async hand-off.
 """
 
 from __future__ import annotations
@@ -29,10 +28,12 @@ from humanoid_robot.observability import get_logger
 _LOG = get_logger("cortex-adapters.g1.lowstate")
 
 LOWSTATE_TOPIC = "rt/lowstate"
+BMS_TOPIC = "rt/lf/bmsstate"
 
 # Minimum array lengths before we trust a vendor IMU field.
 _VEC3 = 3  # rpy / gyroscope / accelerometer
 _QUAT = 4  # quaternion (w, x, y, z)
+_SOC_FULL = 100.0  # BmsState_.soc is a 0-100 percentage
 
 
 def _seq(value: Any) -> list[float]:  # noqa: ANN401 -- vendor arrays are untyped
@@ -92,17 +93,30 @@ def decode_temperature(msg: Any) -> dict[str, float]:  # noqa: ANN401
     return out
 
 
-def _load_lowstate_types() -> tuple[Any, Any]:
+def decode_battery(msg: Any) -> float | None:  # noqa: ANN401
+    """BmsState_ -> battery fraction in [0, 1], or None if unreadable."""
+    soc = getattr(msg, "soc", None)
+    if soc is None:
+        return None
+    try:
+        frac = float(soc) / _SOC_FULL
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, min(1.0, frac))
+
+
+def _load_lowstate_types() -> tuple[Any, Any, Any]:
     """Deferred SDK import — kept out of module import so this file loads
     off-robot (CI, dev laptops) where the vendor SDK is absent."""
     from unitree_sdk2py.core.channel import (  # type: ignore[import-not-found]
         ChannelSubscriber,
     )
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import (  # type: ignore[import-not-found]
+        BmsState_,
         LowState_,
     )
 
-    return ChannelSubscriber, LowState_
+    return ChannelSubscriber, LowState_, BmsState_
 
 
 class G1LowStateReader:
@@ -117,15 +131,24 @@ class G1LowStateReader:
         self._lock = threading.Lock()
         self._imu: dict[str, float] = {}
         self._temp: dict[str, float] = {}
-        self._sub: Any = None
+        self._battery: float = 0.0
+        self._low_sub: Any = None
+        self._bms_sub: Any = None
         self._seen = False
 
     def start(self, *, queue_len: int = 10) -> None:
-        channel_subscriber, low_state = _load_lowstate_types()
-        self._sub = channel_subscriber(LOWSTATE_TOPIC, low_state)
-        self._sub.Init(self._on_message, queue_len)
+        channel_subscriber, low_state, bms_state = _load_lowstate_types()
+        self._low_sub = channel_subscriber(LOWSTATE_TOPIC, low_state)
+        self._low_sub.Init(self._on_lowstate, queue_len)
+        # Battery is a separate topic; a BMS failure must not sink the IMU
+        # + temperature stream, so it's independently guarded.
+        try:
+            self._bms_sub = channel_subscriber(BMS_TOPIC, bms_state)
+            self._bms_sub.Init(self._on_bms, queue_len)
+        except Exception:
+            _LOG.exception("g1.bmsstate.subscribe_failed")
 
-    def _on_message(self, msg: Any) -> None:  # noqa: ANN401 -- DDS callback, untyped msg
+    def _on_lowstate(self, msg: Any) -> None:  # noqa: ANN401 -- DDS callback, untyped msg
         try:
             imu = decode_imu(msg)
             temp = decode_temperature(msg)
@@ -143,6 +166,17 @@ class G1LowStateReader:
                     temp_keys=sorted(temp),
                 )
 
+    def _on_bms(self, msg: Any) -> None:  # noqa: ANN401 -- DDS callback, untyped msg
+        try:
+            frac = decode_battery(msg)
+        except Exception:
+            _LOG.exception("g1.bmsstate.decode_failed")
+            return
+        if frac is None:
+            return
+        with self._lock:
+            self._battery = frac
+
     # -- sync getters wired into the port `source` hooks -----------------
     def imu_sample(self) -> dict[str, float]:
         with self._lock:
@@ -151,3 +185,7 @@ class G1LowStateReader:
     def temperature_sample(self) -> dict[str, float]:
         with self._lock:
             return dict(self._temp)
+
+    def battery_percentage(self) -> float:
+        with self._lock:
+            return self._battery

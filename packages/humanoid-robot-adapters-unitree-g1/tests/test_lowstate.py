@@ -7,6 +7,7 @@ from typing import Any
 
 from humanoid_robot.adapters.unitree_g1.lowstate import (
     G1LowStateReader,
+    decode_battery,
     decode_imu,
     decode_temperature,
 )
@@ -77,11 +78,27 @@ class TestDecodeTemperature:
         assert out == {}
 
 
+class TestDecodeBattery:
+    def test_soc_to_fraction(self) -> None:
+        assert decode_battery(SimpleNamespace(soc=87)) == 0.87
+        assert decode_battery(SimpleNamespace(soc=0)) == 0.0
+        assert decode_battery(SimpleNamespace(soc=100)) == 1.0
+
+    def test_out_of_range_clamped(self) -> None:
+        assert decode_battery(SimpleNamespace(soc=150)) == 1.0
+
+    def test_missing_soc_is_none(self) -> None:
+        assert decode_battery(SimpleNamespace()) is None
+
+    def test_non_numeric_is_none(self) -> None:
+        assert decode_battery(SimpleNamespace(soc="oops")) is None
+
+
 class TestReader:
     def test_getters_reflect_last_message(self) -> None:
         reader = G1LowStateReader()
         # feed a frame straight through the DDS callback (bypasses SDK)
-        reader._on_message(_lowstate(_imu(), [_motor(50), _motor(60)]))
+        reader._on_lowstate(_lowstate(_imu(), [_motor(50), _motor(60)]))
         imu = reader.imu_sample()
         temp = reader.temperature_sample()
         assert imu["yaw_rad"] == 0.3
@@ -90,6 +107,18 @@ class TestReader:
         imu["yaw_rad"] = 999.0
         assert reader.imu_sample()["yaw_rad"] == 0.3
 
+    def test_battery_getter_reflects_bms(self) -> None:
+        reader = G1LowStateReader()
+        assert reader.battery_percentage() == 0.0  # before any frame
+        reader._on_bms(SimpleNamespace(soc=87))
+        assert reader.battery_percentage() == 0.87
+
+    def test_bad_bms_frame_keeps_last(self) -> None:
+        reader = G1LowStateReader()
+        reader._on_bms(SimpleNamespace(soc=42))
+        reader._on_bms(SimpleNamespace())  # no soc → ignored, not zeroed
+        assert reader.battery_percentage() == 0.42
+
     def test_getters_empty_before_first_message(self) -> None:
         reader = G1LowStateReader()
         assert reader.imu_sample() == {}
@@ -97,6 +126,6 @@ class TestReader:
 
     def test_bad_frame_does_not_raise(self) -> None:
         reader = G1LowStateReader()
-        reader._on_message(object())  # no imu_state/motor_state attrs
+        reader._on_lowstate(object())  # no imu_state/motor_state attrs
         # decode returns {} for a shapeless object; no exception escapes
         assert reader.imu_sample() == {}
