@@ -29,6 +29,12 @@ from humanoid_robot.ports.robot import (
     LocomotionPort,
     RobotAdapterPort,
 )
+from humanoid_robot.ports.safety import (
+    SafetyDecision,
+    SafetyPolicyPort,
+    SafetyRequest,
+    Verdict,
+)
 from humanoid_robot.ports.voice import (
     VadDecision,
     VadPort,
@@ -58,12 +64,16 @@ __all__ = [
     "RerankerPort",
     "RetrievalQuery",
     "RobotAdapterPort",
+    "SafetyDecision",
+    "SafetyPolicyPort",
+    "SafetyRequest",
     "Subscription",
     "TtsPort",
     "TtsRequest",
     "VadDecision",
     "VadPort",
     "VectorStorePort",
+    "Verdict",
     "WakeWordEvent",
     "WakeWordPort",
 ]

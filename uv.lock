@@ -49,6 +49,7 @@ members = [
     "humanoid-robot-ports",
     "humanoid-robot-rag",
     "humanoid-robot-robot-adapter",
+    "humanoid-robot-safety",
     "humanoid-robot-testing",
     "humanoid-robot-voice",
 ]
@@ -2012,6 +2013,7 @@ dependencies = [
     { name = "humanoid-robot-events" },
     { name = "humanoid-robot-observability" },
     { name = "humanoid-robot-ports" },
+    { name = "humanoid-robot-safety" },
     { name = "psutil" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -2028,6 +2030,7 @@ requires-dist = [
     { name = "humanoid-robot-events", editable = "packages/humanoid-robot-events" },
     { name = "humanoid-robot-observability", editable = "packages/humanoid-robot-observability" },
     { name = "humanoid-robot-ports", editable = "packages/humanoid-robot-ports" },
+    { name = "humanoid-robot-safety", editable = "apps/safety" },
     { name = "psutil", specifier = ">=6.1" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.6" },
@@ -2245,6 +2248,27 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "typer", specifier = ">=0.15" },
+]
+
+[[package]]
+name = "humanoid-robot-safety"
+version = "0.0.0"
+source = { editable = "apps/safety" }
+dependencies = [
+    { name = "humanoid-robot-domain" },
+    { name = "humanoid-robot-events" },
+    { name = "humanoid-robot-observability" },
+    { name = "humanoid-robot-ports" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "humanoid-robot-domain", editable = "packages/humanoid-robot-domain" },
+    { name = "humanoid-robot-events", editable = "packages/humanoid-robot-events" },
+    { name = "humanoid-robot-observability", editable = "packages/humanoid-robot-observability" },
+    { name = "humanoid-robot-ports", editable = "packages/humanoid-robot-ports" },
+    { name = "pydantic", specifier = ">=2.9" },
 ]
 
 [[package]]

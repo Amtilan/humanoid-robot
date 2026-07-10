@@ -9,6 +9,7 @@ from humanoid_robot.core.api.knowledge import router as knowledge_router
 from humanoid_robot.core.api.plugins import router as plugins_router
 from humanoid_robot.core.api.rag import router as rag_router
 from humanoid_robot.core.api.robot import router as robot_router
+from humanoid_robot.core.api.safety import router as safety_router
 from humanoid_robot.core.api.settings import router as settings_router
 from humanoid_robot.core.api.system import router as system_router
 
@@ -21,6 +22,7 @@ router.include_router(robot_router, prefix="/robot", tags=["robot"])
 router.include_router(rag_router, prefix="/rag", tags=["rag"])
 router.include_router(knowledge_router, prefix="/knowledge", tags=["knowledge"])
 router.include_router(diagnostics_router, prefix="/diagnostics", tags=["diagnostics"])
+router.include_router(safety_router, prefix="/safety", tags=["safety"])
 router.include_router(settings_router, prefix="/settings", tags=["settings"])
 
 __all__ = ["router"]

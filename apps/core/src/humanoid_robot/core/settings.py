@@ -39,6 +39,24 @@ class ObservabilitySettings(BaseModel):
     tracing_enabled: bool = True
 
 
+class SafetySettings(BaseModel):
+    """Safety gate configuration.
+
+    `allowed_capabilities` is fail-closed: capabilities not listed here
+    are denied.  Default set intentionally excludes free-form locomotion
+    to prevent accidental motion on boot.
+    """
+
+    allowed_capabilities: tuple[str, ...] = (
+        "arms.gesture",
+        "head.pose",
+        "locomotion.move",
+        "voice.speak",
+    )
+    rate_limit_window_s: float = 5.0
+    rate_limit_max_events: int = 20
+
+
 class CoreSettings(BaseSettings):
     """Root configuration object."""
 
@@ -54,6 +72,7 @@ class CoreSettings(BaseSettings):
     http: HttpSettings = HttpSettings()
     nats: NatsSettings = NatsSettings()
     observability: ObservabilitySettings = ObservabilitySettings()
+    safety: SafetySettings = SafetySettings()
 
     @classmethod
     def settings_customise_sources(

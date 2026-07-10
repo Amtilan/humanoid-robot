@@ -1,35 +1,23 @@
 [project]
-name = "humanoid-robot-core"
+name = "humanoid-robot-safety"
 version = "0.0.0"
-description = "cortex-core — main orchestrator (FastAPI + event bus + composition root)."
+description = "cortex-safety — gate between orchestrators and motor commands. Fail-closed."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.32",
     "pydantic>=2.9",
-    "pydantic-settings>=2.6",
-    "typer>=0.15",
-    "psutil>=6.1",
     "humanoid-robot-domain",
     "humanoid-robot-events",
     "humanoid-robot-ports",
-    "humanoid-robot-adapters-nats",
     "humanoid-robot-observability",
-    "humanoid-robot-safety",
 ]
 
 [tool.uv.sources]
 humanoid-robot-domain = { workspace = true }
 humanoid-robot-events = { workspace = true }
 humanoid-robot-ports = { workspace = true }
-humanoid-robot-adapters-nats = { workspace = true }
 humanoid-robot-observability = { workspace = true }
-humanoid-robot-safety = { workspace = true }
-
-[project.scripts]
-cortex-core = "humanoid_robot.core.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

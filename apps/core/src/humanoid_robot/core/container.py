@@ -7,6 +7,7 @@ dependencies routed through here.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from dataclasses import dataclass, field
 from typing import Self
@@ -22,6 +23,14 @@ from humanoid_robot.core.settings import CoreSettings
 from humanoid_robot.observability import PromMetrics
 from humanoid_robot.plugins_sdk import PluginRegistry
 from humanoid_robot.ports import EventBusPort, Subscription
+from humanoid_robot.safety import (
+    ChainPolicy,
+    EStopPolicy,
+    EStopState,
+    KnownCapabilitiesPolicy,
+    RateLimitPolicy,
+    SafetyGate,
+)
 
 
 @dataclass(slots=True)
@@ -40,6 +49,8 @@ class AppContainer:
     robot_manifest_cache: RobotManifestCache
     knowledge_service: KnowledgeService = field(default_factory=KnowledgeService)
     diagnostics_ticker: DiagnosticsTicker | None = field(default=None)
+    safety_gate: SafetyGate | None = field(default=None)
+    safety_task: asyncio.Task[None] | None = field(default=None)
     _manifest_subscription: Subscription | None = field(default=None)
 
     @classmethod
@@ -71,6 +82,20 @@ class AppContainer:
         diagnostics_ticker = DiagnosticsTicker(bus=bus)
         await diagnostics_ticker.start()
 
+        estop = EStopState(engaged=True)
+        safety_policy = ChainPolicy(
+            [
+                KnownCapabilitiesPolicy(allowed=frozenset(settings.safety.allowed_capabilities)),
+                RateLimitPolicy(
+                    window_s=settings.safety.rate_limit_window_s,
+                    max_events=settings.safety.rate_limit_max_events,
+                ),
+                EStopPolicy(estop),
+            ]
+        )
+        safety_gate = SafetyGate(policy=safety_policy, bus=bus, estop=estop)
+        safety_task = asyncio.create_task(safety_gate.run(), name="safety-gate")
+
         return cls(
             settings=settings,
             event_bus=bus,
@@ -80,6 +105,8 @@ class AppContainer:
             robot_manifest_cache=manifest_cache,
             knowledge_service=KnowledgeService(),
             diagnostics_ticker=diagnostics_ticker,
+            safety_gate=safety_gate,
+            safety_task=safety_task,
             _manifest_subscription=manifest_subscription,
         )
 
@@ -89,6 +116,13 @@ class AppContainer:
         if self.diagnostics_ticker is not None:
             await self.diagnostics_ticker.stop()
             self.diagnostics_ticker = None
+        if self.safety_gate is not None:
+            self.safety_gate.request_stop()
+        if self.safety_task is not None:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await self.safety_task
+            self.safety_task = None
+        self.safety_gate = None
         if self._manifest_subscription is not None:
             with contextlib.suppress(Exception):
                 await self._manifest_subscription.cancel()

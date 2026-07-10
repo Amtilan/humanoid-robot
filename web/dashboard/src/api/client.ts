@@ -209,4 +209,22 @@ export const api = {
   ingestJobs: () => getJson<IngestJobStatus[]>("/api/v1/knowledge/ingest-jobs"),
   diagnosticsHost: () => getJson<HostDiagnostics>("/api/v1/diagnostics/host"),
   diagnosticsGpu: () => getJson<GpuStats>("/api/v1/diagnostics/gpu"),
+  safetyStatus: () => getJson<SafetyStatus>("/api/v1/safety/status"),
+  safetyEngage: (body: { actor: string; reason?: string }) =>
+    postJson<{ engaged: boolean; changed: boolean }, typeof body>(
+      "/api/v1/safety/estop/engage",
+      body,
+    ),
+  safetyRelease: (body: { actor: string }) =>
+    postJson<{ engaged: boolean; changed: boolean }, typeof body>(
+      "/api/v1/safety/estop/release",
+      body,
+    ),
 };
+
+export interface SafetyStatus {
+  estop_engaged: boolean;
+  allowed_capabilities: string[];
+  rate_limit_window_s: number;
+  rate_limit_max_events: number;
+}

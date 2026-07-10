@@ -7,6 +7,12 @@ from humanoid_robot.events.robot import (
     RobotCommandResulted,
     RobotTelemetry,
 )
+from humanoid_robot.events.safety import (
+    SafetyCommandDenied,
+    SafetyCommandForwarded,
+    SafetyEStopEngaged,
+    SafetyEStopReleased,
+)
 from humanoid_robot.events.system import (
     OtaAvailable,
     OtaApplied,
@@ -42,6 +48,10 @@ __all__ = [
     "RobotCommandRequested",
     "RobotCommandResulted",
     "RobotTelemetry",
+    "SafetyCommandDenied",
+    "SafetyCommandForwarded",
+    "SafetyEStopEngaged",
+    "SafetyEStopReleased",
     "SecurityAudit",
     "SpeechDetected",
     "SystemDiagnosticsTick",

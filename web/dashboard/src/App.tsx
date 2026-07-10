@@ -10,6 +10,7 @@ import {
   Puzzle,
   Radio,
   Settings as SettingsIcon,
+  ShieldAlert,
   Sparkles,
 } from "lucide-react";
 
@@ -21,6 +22,7 @@ import { KnowledgePage } from "./pages/KnowledgePage";
 import { PluginsPage } from "./pages/PluginsPage";
 import { QaPage } from "./pages/QaPage";
 import { RobotPage } from "./pages/RobotPage";
+import { SafetyPage } from "./pages/SafetyPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { VoiceSessionsPage } from "./pages/VoiceSessionsPage";
 import { MicActivity } from "./lib/micActivity";
@@ -28,6 +30,7 @@ import { cn } from "./lib/cn";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/safety", label: "Safety", icon: ShieldAlert },
   { to: "/robot", label: "Robot", icon: Bot },
   { to: "/voice", label: "Voice", icon: Mic },
   { to: "/knowledge", label: "Knowledge", icon: BookOpen },
@@ -72,6 +75,7 @@ export function App() {
       <main className="flex-1 overflow-auto p-8">
         <Routes>
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/safety" element={<SafetyPage />} />
           <Route path="/robot" element={<RobotPage />} />
           <Route path="/voice" element={<VoiceSessionsPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
