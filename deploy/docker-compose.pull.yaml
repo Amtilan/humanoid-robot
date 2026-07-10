@@ -68,6 +68,64 @@ services:
     ports:
       - "127.0.0.1:8081:80"
 
+  # ---------------------------------------------------------------------------
+  # Opt-in services. Model weights live under /var/lib/humanoid-robot/models
+  # on the host (mounted read-only into the container). Enable with:
+  #   docker compose --profile voice up -d
+  #   docker compose --profile rag   up -d
+  # See deploy/scripts/fetch-models.sh for the download runbook.
+  # ---------------------------------------------------------------------------
+
+  qdrant:
+    image: qdrant/qdrant:v1.11.0
+    restart: unless-stopped
+    profiles: ["rag"]
+    volumes:
+      - qdrant-data:/qdrant/storage
+    ports:
+      - "127.0.0.1:6333:6333"
+
+  voice:
+    <<: *python-base
+    profiles: ["voice"]
+    command:
+      - "cortex-voice"
+      - "run"
+      - "--config"
+      - "/etc/humanoid-robot/voice.yaml"
+    environment:
+      HR_VOICE__NATS__SERVERS: '["nats://nats:4222"]'
+    volumes:
+      - /etc/humanoid-robot/voice.yaml:/etc/humanoid-robot/voice.yaml:ro
+      - /var/lib/humanoid-robot/models:/var/lib/humanoid-robot/models:ro
+    depends_on:
+      nats:
+        condition: service_healthy
+      core:
+        condition: service_started
+
+  rag:
+    <<: *python-base
+    profiles: ["rag"]
+    command:
+      - "cortex-rag"
+      - "run"
+      - "--config"
+      - "/etc/humanoid-robot/rag.yaml"
+    environment:
+      HR_RAG__NATS__SERVERS: '["nats://nats:4222"]'
+    volumes:
+      - /etc/humanoid-robot/rag.yaml:/etc/humanoid-robot/rag.yaml:ro
+      - /var/lib/humanoid-robot/models:/var/lib/humanoid-robot/models:ro
+      - rag-state:/var/lib/humanoid-robot
+    depends_on:
+      nats:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
 volumes:
   nats-jetstream:
   core-state:
+  qdrant-data:
+  rag-state:

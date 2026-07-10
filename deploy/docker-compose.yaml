@@ -59,3 +59,65 @@ services:
       - core
     ports:
       - "127.0.0.1:8081:80"
+
+  # ---------------------------------------------------------------------------
+  # Opt-in services. Model weights are NOT shipped in the image — see
+  # deploy/scripts/fetch-models.sh for the download runbook. Enable with:
+  #   docker compose --profile voice up            # ASR/TTS pipeline
+  #   docker compose --profile rag   up            # Qdrant + grounded QA
+  # ---------------------------------------------------------------------------
+
+  qdrant:
+    image: qdrant/qdrant:v1.11.0
+    restart: unless-stopped
+    profiles: ["rag"]
+    volumes:
+      - qdrant-data:/qdrant/storage
+    ports:
+      - "127.0.0.1:6333:6333"
+
+  voice:
+    <<: *python-base
+    profiles: ["voice"]
+    command:
+      - "cortex-voice"
+      - "run"
+      - "--config"
+      - "/etc/humanoid-robot/voice.yaml"
+    environment:
+      HR_VOICE__NATS__SERVERS: '["nats://nats:4222"]'
+    volumes:
+      # YAML config on host wins over env-vars for stack selection.
+      - ./config/voice.yaml:/etc/humanoid-robot/voice.yaml:ro
+      # Models: developer creates /var/lib/humanoid-robot/models on the host
+      # (or a symlink to a large-file mount) via fetch-models.sh.
+      - /var/lib/humanoid-robot/models:/var/lib/humanoid-robot/models:ro
+    depends_on:
+      nats:
+        condition: service_healthy
+      core:
+        condition: service_started
+
+  rag:
+    <<: *python-base
+    profiles: ["rag"]
+    command:
+      - "cortex-rag"
+      - "run"
+      - "--config"
+      - "/etc/humanoid-robot/rag.yaml"
+    environment:
+      HR_RAG__NATS__SERVERS: '["nats://nats:4222"]'
+    volumes:
+      - ./config/rag.yaml:/etc/humanoid-robot/rag.yaml:ro
+      - /var/lib/humanoid-robot/models:/var/lib/humanoid-robot/models:ro
+      - rag-state:/var/lib/humanoid-robot
+    depends_on:
+      nats:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+volumes:
+  qdrant-data:
+  rag-state:

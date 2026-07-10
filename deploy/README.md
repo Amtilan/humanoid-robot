@@ -34,6 +34,39 @@ Pin a specific release in production:
 curl -sSL … | sudo IMAGE_TAG=v1.0.0 bash
 ```
 
+### Voice + RAG (opt-in, ~9.5 GB of models)
+
+The base install runs cortex-core + robot-adapter + dashboard only —
+those services fit in a few hundred MB and boot in seconds.  Voice
+(ASR/TTS) and RAG (grounded QA) need model weights that don't belong
+in an OCI image.  They live under `profiles:` and stay off by default.
+
+```bash
+# One-shot download (~9.5 GB into /var/lib/humanoid-robot/models)
+sudo bash /opt/humanoid-robot/fetch-models.sh
+# Fetch just the ASR bundle
+sudo MODELS=asr bash /opt/humanoid-robot/fetch-models.sh
+
+# Turn the services on
+cd /opt/humanoid-robot
+docker compose --profile voice --profile rag up -d
+
+# Turn them back off (keeps volumes so restarts don't re-download)
+docker compose --profile voice --profile rag down
+```
+
+Extra services under those profiles:
+
+- `qdrant` — vector store used by cortex-rag, persisted in the
+  `qdrant-data` named volume so the ingested corpus survives image
+  swaps.
+- `voice` — full mic-to-speaker pipeline (VAD → wake → ASR → TTS).
+- `rag`   — grounded QA orchestrator.
+
+Both services mount `/etc/humanoid-robot/{voice,rag}.yaml` from the
+host so you can iterate on the stack config without rebuilding the
+image.
+
 Switch to the real robot:
 
 ```bash

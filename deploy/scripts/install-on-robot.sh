@@ -51,9 +51,20 @@ main() {
 
     install -d -m 0755 "${INSTALL_DIR}"
     install -d -m 0755 "${CONFIG_DIR}"
+    install -d -m 0755 /var/lib/humanoid-robot/models
 
     fetch deploy/docker-compose.pull.yaml "${INSTALL_DIR}/docker-compose.yaml"
     fetch deploy/nats.conf                "${INSTALL_DIR}/nats.conf"
+    fetch deploy/scripts/fetch-models.sh  "${INSTALL_DIR}/fetch-models.sh"
+    chmod +x "${INSTALL_DIR}/fetch-models.sh"
+    for cfg in voice rag; do
+        local dst="${CONFIG_DIR}/${cfg}.yaml"
+        if [[ -e "${dst}" ]]; then
+            echo "  keeping existing ${dst}"
+        else
+            fetch "deploy/config/${cfg}.yaml" "${dst}"
+        fi
+    done
 
     for env in cortex-core cortex-robot-adapter cortex-voice cortex-rag; do
         local src="deploy/config/${env}.env.example"
@@ -101,6 +112,10 @@ Switch adapter (e.g. unitree_g1_edu):
 Upgrade:
   edit ${INSTALL_DIR}/.env and set IMAGE_TAG=vX.Y.Z
   docker compose pull && docker compose up -d
+
+Enable voice + RAG (~9.5 GB of models pulled from Hugging Face):
+  sudo bash ${INSTALL_DIR}/fetch-models.sh
+  docker compose --profile voice --profile rag up -d
 EOF
 }
 
