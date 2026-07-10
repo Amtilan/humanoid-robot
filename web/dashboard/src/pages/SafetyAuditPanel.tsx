@@ -83,6 +83,7 @@ export function AuditPanel() {
               >
                 {r.subject}
               </span>
+              <SubmitterBadge submitter={submitterOf(r.payload)} />
               <span className="min-w-0 truncate text-muted-foreground">
                 {JSON.stringify(r.payload)}
               </span>
@@ -102,4 +103,18 @@ function styleFor(subject: string): string {
   if (subject === "safety.command.forwarded") return "bg-emerald-500/15 text-emerald-300";
   if (subject.startsWith("robot.command.")) return "bg-sky-500/15 text-sky-300";
   return "bg-muted text-muted-foreground";
+}
+
+function submitterOf(payload: Record<string, unknown>): string | null {
+  const value = payload.submitter ?? payload.actor;
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function SubmitterBadge({ submitter }: { submitter: string | null }) {
+  if (submitter === null) return null;
+  return (
+    <span className="shrink-0 rounded border border-border bg-background/70 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
+      {submitter}
+    </span>
+  );
 }

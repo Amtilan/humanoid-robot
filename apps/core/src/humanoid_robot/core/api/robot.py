@@ -42,6 +42,7 @@ class RobotCommandBody(BaseModel):
 
     capability: str = Field(min_length=1, max_length=64)
     payload: dict[str, Any] = Field(default_factory=dict)
+    submitter: str = Field(default="operator", min_length=1, max_length=64)
 
 
 class RobotCommandAck(BaseModel):
@@ -69,6 +70,7 @@ async def submit_command(body: RobotCommandBody, request: Request) -> RobotComma
             command_id=command_id,
             capability=body.capability,
             payload=body.payload,
+            submitter=body.submitter,
         )
     )
     return RobotCommandAck(command_id=command_id)

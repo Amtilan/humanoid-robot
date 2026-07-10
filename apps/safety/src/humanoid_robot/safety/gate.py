@@ -72,6 +72,7 @@ class SafetyGate:
             command_id=event.command_id,
             capability=event.capability,
             payload=event.payload,
+            submitter=event.submitter,
         )
         try:
             decision = await self.policy.evaluate(request)
@@ -91,6 +92,7 @@ class SafetyGate:
                     command_id=event.command_id,
                     capability=event.capability,
                     payload=event.payload,
+                    submitter=event.submitter,
                 )
             )
             return
@@ -103,6 +105,7 @@ class SafetyGate:
                 command_id=event.command_id,
                 capability=event.capability,
                 reason=decision.reason,
+                submitter=event.submitter,
             )
         )
 

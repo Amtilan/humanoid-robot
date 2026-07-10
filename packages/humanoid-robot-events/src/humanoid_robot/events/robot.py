@@ -33,6 +33,7 @@ class RobotCommandRequested(BaseEvent):
     command_id: str
     capability: str  # e.g. "locomotion.move", "arms.gesture"
     payload: dict[str, Any]
+    submitter: str = "unknown"  # operator / llm / plugin:<name> / test
 
 
 class RobotCommandResulted(BaseEvent):

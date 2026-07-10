@@ -24,6 +24,7 @@ class SafetyRequest(BaseModel):
     command_id: str
     capability: str
     payload: dict[str, Any]
+    submitter: str = "unknown"
 
 
 class SafetyDecision(BaseModel):

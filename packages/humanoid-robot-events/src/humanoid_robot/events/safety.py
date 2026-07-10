@@ -35,6 +35,7 @@ class SafetyCommandDenied(BaseEvent):
     command_id: str
     capability: str
     reason: str
+    submitter: str = "unknown"
 
 
 class SafetyCommandForwarded(BaseEvent):
@@ -46,6 +47,7 @@ class SafetyCommandForwarded(BaseEvent):
     command_id: str
     capability: str
     payload: dict[str, Any]
+    submitter: str = "unknown"
 
 
 class SafetyWatchdogHeartbeat(BaseEvent):

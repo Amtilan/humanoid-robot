@@ -22,9 +22,13 @@ export function RobotPage() {
   });
 
   const { push } = useToast();
+  const [submitter, setSubmitter] = useState("operator");
   const command = useMutation({
-    mutationFn: (body: { capability: string; payload: Record<string, unknown> }) =>
-      api.robotCommand(body),
+    mutationFn: (body: {
+      capability: string;
+      payload: Record<string, unknown>;
+      submitter: string;
+    }) => api.robotCommand(body),
     onSuccess: (ack) =>
       push({ kind: "info", title: "Command dispatched", description: ack.command_id }),
     onError: (err) =>
@@ -39,6 +43,7 @@ export function RobotPage() {
     command.mutate({
       capability: "locomotion.move",
       payload: { linear_x_mps, linear_y_mps: 0, angular_z_rps, duration_ms },
+      submitter,
     });
 
   return (
@@ -59,6 +64,21 @@ export function RobotPage() {
           decides whether it becomes <code>safety.command.forwarded</code>.
           Release E-STOP first if commands are being denied.
         </p>
+        <div className="flex items-center gap-2 pb-3">
+          <label className="text-xs uppercase text-muted-foreground">
+            Submitter
+          </label>
+          <select
+            value={submitter}
+            onChange={(e) => setSubmitter(e.target.value)}
+            className="rounded-md border border-border bg-background/60 px-2 py-1 text-xs"
+          >
+            <option value="operator">operator</option>
+            <option value="llm">llm</option>
+            <option value="plugin">plugin</option>
+            <option value="test">test</option>
+          </select>
+        </div>
         <div className="flex flex-wrap gap-2">
           <CmdButton
             label="↑ walk 0.3 m/s"
@@ -84,7 +104,11 @@ export function RobotPage() {
           <CmdButton
             label="■ stop"
             onClick={() =>
-              command.mutate({ capability: "locomotion.stop", payload: {} })
+              command.mutate({
+                capability: "locomotion.stop",
+                payload: {},
+                submitter,
+              })
             }
             disabled={command.isPending}
             variant="danger"
