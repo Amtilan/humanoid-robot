@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import ssl
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Self
 
@@ -94,17 +95,27 @@ class NatsEventBus(EventBusPort):
         """Open the connection. Idempotent."""
         if self._client is not None and self._client.is_connected:
             return self
-        self._client = await nats.connect(
-            servers=list(self.config.servers),
-            name=self.config.name,
-            connect_timeout=self.config.connect_timeout_s,
-            reconnect_time_wait=self.config.reconnect_time_wait_s,
-            max_reconnect_attempts=self.config.max_reconnect_attempts,
-            user_credentials=self.config.user_credentials,
-            tls_ca_file=self.config.tls_ca,
-            tls_cert_file=self.config.tls_cert,
-            tls_key_file=self.config.tls_key,
+        # nats-py 2.7+ dropped the individual tls_*_file kwargs in favour
+        # of a pre-built ssl.SSLContext passed via `tls=`. Only build one
+        # when the operator actually configured TLS material — plain
+        # `nats://` connections skip the whole knot.
+        options: dict[str, object] = {
+            "servers": list(self.config.servers),
+            "name": self.config.name,
+            "connect_timeout": self.config.connect_timeout_s,
+            "reconnect_time_wait": self.config.reconnect_time_wait_s,
+            "max_reconnect_attempts": self.config.max_reconnect_attempts,
+        }
+        if self.config.user_credentials:
+            options["user_credentials"] = self.config.user_credentials
+        tls_ctx = _build_tls_context(
+            ca=self.config.tls_ca,
+            cert=self.config.tls_cert,
+            key=self.config.tls_key,
         )
+        if tls_ctx is not None:
+            options["tls"] = tls_ctx
+        self._client = await nats.connect(**options)  # type: ignore[arg-type]
         return self
 
     async def publish(self, event: BaseEvent) -> None:
@@ -192,6 +203,21 @@ class NatsEventBus(EventBusPort):
             msg = "NatsEventBus is not connected; call .connect() first"
             raise RuntimeError(msg)
         return self._client
+
+
+def _build_tls_context(
+    *,
+    ca: str | None,
+    cert: str | None,
+    key: str | None,
+) -> ssl.SSLContext | None:
+    """Assemble the SSLContext nats-py 2.7+ expects, or None when no TLS."""
+    if not (ca or cert or key):
+        return None
+    ctx = ssl.create_default_context(cafile=ca) if ca else ssl.create_default_context()
+    if cert and key:
+        ctx.load_cert_chain(certfile=cert, keyfile=key)
+    return ctx
 
 
 def _decode(msg: Msg) -> BaseEvent | None:

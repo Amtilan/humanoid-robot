@@ -41,10 +41,24 @@ services:
       HR_OBSERVABILITY__TRACING_ENABLED: "false"
     ports:
       - "127.0.0.1:8080:8080"
+    healthcheck:
+      # curl comes from the base image; readiness probe fires ONLY after
+      # bus.subscribe() calls have all landed, so anything gated on
+      # "core is healthy" can publish without a race.
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/api/v1/system/health/ready || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 3s
 
   robot-adapter:
     <<: *python-base
     command: ["cortex-robot-adapter", "run", "mock"]
+    depends_on:
+      nats:
+        condition: service_healthy
+      core:
+        condition: service_healthy
     environment:
       HR_ROBOT_ADAPTER__NATS__SERVERS: '["nats://nats:4222"]'
       HR_ROBOT_ADAPTER__ADAPTER_NAME: "mock"

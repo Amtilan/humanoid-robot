@@ -48,10 +48,23 @@ services:
       - core-state:/var/lib/humanoid-robot
     ports:
       - "127.0.0.1:8080:8080"
+    healthcheck:
+      # Readiness gates the manifest / telemetry subscribers, so anything
+      # that publishes on the bus must depend on this being healthy.
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/api/v1/system/health/ready || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 3s
 
   robot-adapter:
     <<: *python-base
     command: ["cortex-robot-adapter", "run", "${HR_ROBOT_ADAPTER__ADAPTER_NAME:-mock}"]
+    depends_on:
+      nats:
+        condition: service_healthy
+      core:
+        condition: service_healthy
     environment:
       HR_ROBOT_ADAPTER__NATS__SERVERS: '["nats://nats:4222"]'
       HR_ROBOT_ADAPTER__ADAPTER_NAME: "${HR_ROBOT_ADAPTER__ADAPTER_NAME:-mock}"
