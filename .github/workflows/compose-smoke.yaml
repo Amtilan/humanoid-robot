@@ -1,19 +1,27 @@
 name: compose-smoke
 
-# End-to-end smoke check for the local compose stack: build the images,
-# bring the platform up, poke each service's health endpoint over HTTP,
-# then tear everything down. Guards the pull-only robot path — if this
-# job goes red the operator's one-liner installer is likely broken.
+# Guards the pull-only robot install path: build the compose stack,
+# bring it up, exercise HTTP endpoints, tear down. If this job goes
+# red the operator's one-liner installer is likely broken.
 #
-# Kept separate from publish-images.yaml so a broken smoke never blocks
-# a release push (semver tags still publish).
+# Two jobs:
+#   * validate — fast (<30 s). Parses every compose file / profile
+#     combination with `docker compose config -q`. Catches YAML,
+#     interpolation, and reference errors before eating any build time.
+#   * smoke — full stack test. Depends on validate. Only fires up the
+#     base (no-profile) services — voice/rag/metrics stay off because
+#     they need model volumes or extra image pulls we're not paying for
+#     on every PR.
 
 on:
   pull_request:
     paths:
       - "deploy/docker/**"
       - "deploy/docker-compose*.yaml"
+      - "deploy/observability/**"
       - "deploy/nats.conf"
+      - "deploy/config/**.yaml"
+      - "deploy/scripts/**"
       - "packages/**"
       - "apps/**"
       - "plugins/**"
@@ -33,34 +41,67 @@ permissions:
   contents: read
 
 jobs:
-  smoke:
-    name: docker compose smoke test
+  validate:
+    name: compose validate
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up buildx (with GHA cache)
+      - name: Validate source compose (no profile)
+        run: docker compose -f deploy/docker-compose.yaml config -q
+
+      - name: Validate source compose (all profiles)
+        run: |
+          docker compose -f deploy/docker-compose.yaml \
+              --profile voice --profile rag --profile metrics \
+              config -q
+
+      - name: Validate pull-only compose (no profile)
+        env:
+          IMAGE_TAG: main
+          HR_ROBOT_ADAPTER__ADAPTER_NAME: mock
+        run: docker compose -f deploy/docker-compose.pull.yaml config -q
+
+      - name: Validate pull-only compose (all profiles)
+        env:
+          IMAGE_TAG: main
+          HR_ROBOT_ADAPTER__ADAPTER_NAME: mock
+        run: |
+          docker compose -f deploy/docker-compose.pull.yaml \
+              --profile voice --profile rag --profile metrics \
+              config -q
+
+      - name: List services per profile (visibility)
+        run: |
+          echo "--- source (no profile) ---"
+          docker compose -f deploy/docker-compose.yaml config --services
+          echo "--- source (full) ---"
+          docker compose -f deploy/docker-compose.yaml \
+              --profile voice --profile rag --profile metrics \
+              config --services
+
+  smoke:
+    name: docker compose smoke test
+    runs-on: ubuntu-24.04
+    needs: validate
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: deploy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: compose-smoke-${{ runner.os }}-${{ hashFiles('deploy/docker/**', 'pyproject.toml', 'uv.lock', 'web/dashboard/pnpm-lock.yaml') }}
-          restore-keys: |
-            compose-smoke-${{ runner.os }}-
-
-      - name: docker compose build
+      - name: Build base + dashboard images
         env:
           DOCKER_BUILDKIT: "1"
-        run: |
-          cd deploy
-          docker compose build
+        run: docker compose build --pull
 
-      - name: docker compose up (detached)
+      - name: Bring the base stack up
         run: |
-          cd deploy
           docker compose up -d
           docker compose ps
 
@@ -73,16 +114,17 @@ jobs:
             fi
             sleep 1
           done
-          echo "cortex-core failed to become ready" >&2
+          echo "cortex-core failed to become ready in 60s" >&2
           exit 1
 
-      - name: Poke health endpoints
+      - name: Poke health + read-model endpoints
         run: |
+          set -e
           echo "--- /system/health/live ---"
-          curl -sSf http://127.0.0.1:8080/api/v1/system/health/live | tee /tmp/live.json
+          curl -sSf http://127.0.0.1:8080/api/v1/system/health/live
           echo
           echo "--- /system/health/ready ---"
-          curl -sSf http://127.0.0.1:8080/api/v1/system/health/ready | tee /tmp/ready.json
+          curl -sSf http://127.0.0.1:8080/api/v1/system/health/ready
           echo
           echo "--- /safety/status ---"
           curl -sSf http://127.0.0.1:8080/api/v1/safety/status | head -c 4000
@@ -91,11 +133,11 @@ jobs:
           curl -sSf http://127.0.0.1:8080/api/v1/adapters/groups | head -c 4000
           echo
 
-      - name: Verify dashboard serves index
+      - name: Verify dashboard SPA serves
         run: |
           curl -sSf http://127.0.0.1:8081/ | grep -q '<div id="root"></div>'
 
-      - name: Wait for robot-adapter to publish RobotAdapterReady
+      - name: Verify mock adapter published RobotAdapterReady
         run: |
           for i in $(seq 1 30); do
             body=$(curl -sf http://127.0.0.1:8080/api/v1/robot/manifests || true)
@@ -106,15 +148,11 @@ jobs:
             fi
             sleep 1
           done
-          echo "robot-adapter never registered mock manifest" >&2
-          docker compose -f deploy/docker-compose.yaml logs robot-adapter | tail -100
+          echo "robot-adapter never registered mock manifest in 30s" >&2
           exit 1
 
-      - name: Verify safety telemetry ticks are flowing
+      - name: Verify diagnostics ticker is publishing
         run: |
-          # DiagnosticsTicker fires every 5s; wait up to 20s for the first tick
-          # to land in the audit log (safety.command.forwarded is per-command
-          # only, so we assert on the timeline API instead).
           for i in $(seq 1 20); do
             body=$(curl -sf http://127.0.0.1:8080/api/v1/diagnostics/host || true)
             if echo "$body" | grep -q '"cpu"'; then
@@ -123,24 +161,39 @@ jobs:
             fi
             sleep 1
           done
-          echo "diagnostics endpoint never returned live host stats" >&2
+          echo "diagnostics endpoint never returned live host stats in 20s" >&2
           exit 1
 
-      - name: Dump logs on failure
+      - name: Verify safety gate wired
+        run: |
+          # /safety/status must include the pending_command_count field —
+          # proves the CommandReconciler is running under the gate.
+          curl -sSf http://127.0.0.1:8080/api/v1/safety/status | \
+              grep -q '"pending_command_count"'
+
+      - name: Verify entry-point discovery in the base image
+        run: |
+          docker compose exec -T robot-adapter cortex-robot-adapter list | tee /tmp/adapters.txt
+          grep -q "^mock" /tmp/adapters.txt
+
+      - name: Dump service logs on failure
         if: failure()
         run: |
-          cd deploy
-          echo "==== nats ===="
-          docker compose logs nats | tail -80
-          echo "==== core ===="
-          docker compose logs core | tail -200
-          echo "==== robot-adapter ===="
-          docker compose logs robot-adapter | tail -200
-          echo "==== dashboard ===="
-          docker compose logs dashboard | tail -80
+          for svc in nats core robot-adapter dashboard; do
+            echo "==== $svc ===="
+            docker compose logs --no-color --timestamps --tail=200 "$svc" || true
+          done
 
-      - name: docker compose down
+      - name: Upload log artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-smoke-logs
+          path: |
+            /tmp/adapters.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Tear the stack down
         if: always()
-        run: |
-          cd deploy
-          docker compose down -v --remove-orphans
+        run: docker compose down -v --remove-orphans
