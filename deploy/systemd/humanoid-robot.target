@@ -1,0 +1,14 @@
+# /etc/systemd/system/humanoid-robot.target
+#
+# Umbrella target for one-shot bring-up / tear-down of the platform:
+#   systemctl start humanoid-robot.target
+#   systemctl stop humanoid-robot.target
+# All four service units pull this target in via WantedBy=.
+
+[Unit]
+Description=humanoid-robot platform
+Wants=cortex-core.service cortex-robot-adapter.service cortex-voice.service cortex-rag.service
+After=cortex-core.service cortex-robot-adapter.service cortex-voice.service cortex-rag.service
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,44 @@
+# /etc/systemd/system/cortex-rag.service
+#
+# Grounded QA orchestrator: subscribes to asr.final, runs retrieval +
+# LLM (Qwen via llama.cpp) + guardrails, publishes llm.answer /
+# llm.rejected. Reads model paths + Qdrant URL from
+# /etc/humanoid-robot/cortex-rag.env.
+
+[Unit]
+Description=humanoid-robot RAG runner
+After=network-online.target nats-server.service cortex-core.service
+Wants=network-online.target
+Requires=nats-server.service
+
+[Service]
+Type=exec
+User=humanoid-robot
+Group=humanoid-robot
+WorkingDirectory=/opt/humanoid-robot
+Environment=PATH=/opt/humanoid-robot/.venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HR_RAG__NATS__SERVERS=["nats://127.0.0.1:4222"]
+EnvironmentFile=/etc/humanoid-robot/cortex-rag.env
+
+ExecStart=/opt/humanoid-robot/.venv/bin/cortex-rag run --config /etc/humanoid-robot/rag.yaml
+
+Restart=on-failure
+RestartSec=5s
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+# llama.cpp mmaps model weights + emits JIT for GPU offload → JIT stays.
+MemoryDenyWriteExecute=false
+RestrictRealtime=true
+
+ReadWritePaths=/var/log/humanoid-robot /var/lib/humanoid-robot/models /var/lib/humanoid-robot/rag
+
+[Install]
+WantedBy=multi-user.target

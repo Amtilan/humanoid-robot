@@ -1,0 +1,50 @@
+# /etc/systemd/system/cortex-robot-adapter.service
+#
+# Bridges cortex-core (safety-forwarded commands) to the physical robot
+# via the discovered adapter (unitree_g1_edu, mock, ...). Ships the
+# TelemetryPump: battery/imu/temperature → robot.telemetry.
+
+[Unit]
+Description=humanoid-robot robot adapter runner
+After=network-online.target nats-server.service cortex-core.service
+Wants=network-online.target
+Requires=nats-server.service
+
+[Service]
+Type=exec
+User=humanoid-robot
+Group=humanoid-robot
+WorkingDirectory=/opt/humanoid-robot
+Environment=PATH=/opt/humanoid-robot/.venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HR_ROBOT_ADAPTER__NATS__SERVERS=["nats://127.0.0.1:4222"]
+Environment=HR_ROBOT_ADAPTER__ADAPTER_NAME=unitree_g1_edu
+Environment=HR_ROBOT_ADAPTER__TELEMETRY_INTERVAL_S=5
+EnvironmentFile=-/etc/humanoid-robot/cortex-robot-adapter.env
+
+# The adapter name (positional arg) is read from HR_ROBOT_ADAPTER__ADAPTER_NAME
+# via load_settings; the CLI takes the same name as a positional.
+ExecStart=/opt/humanoid-robot/.venv/bin/cortex-robot-adapter run ${HR_ROBOT_ADAPTER__ADAPTER_NAME}
+
+Restart=on-failure
+RestartSec=5s
+
+# The Unitree DDS transport needs the network interface AF_PACKET; keep
+# CAP_NET_RAW for now until we switch to a lower-privileged setup.
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+
+ReadWritePaths=/var/log/humanoid-robot
+
+[Install]
+WantedBy=multi-user.target

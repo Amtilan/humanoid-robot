@@ -32,14 +32,7 @@ services:
 
   core:
     <<: *python-base
-    command:
-      - "uvicorn"
-      - "humanoid_robot.core.app:app_from_env"
-      - "--factory"
-      - "--host"
-      - "0.0.0.0"
-      - "--port"
-      - "8080"
+    command: ["cortex-core", "serve"]
     environment:
       HR_HTTP__PORT: "8080"
       HR_HTTP__HOST: "0.0.0.0"

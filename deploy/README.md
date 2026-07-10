@@ -62,14 +62,61 @@ developer laptop:
 - Real Unitree G1 SDK
 - systemd, Ansible, OTA channel — Phase 9 R2+
 
-## Bringing up cortex-core on a Jetson (future rounds)
+## Jetson bring-up (systemd)
 
-1. Install `nats-server` as a system service (see [NATS install docs](
-   https://docs.nats.io/running-a-nats-service/introduction/installation)).
-2. Create a dedicated `humanoid-robot` user, home `/opt/humanoid-robot`,
-   clone the release artefact there.
-3. `uv sync --all-packages` inside `/opt/humanoid-robot`.
-4. Copy `deploy/config/base.yaml` to `/etc/humanoid-robot/config.yaml`
-   and edit as needed.
-5. Copy `deploy/systemd/*.service` to `/etc/systemd/system/`.
-6. `systemctl enable --now cortex-core cortex-robot-adapter …`.
+The `systemd/` folder ships four unit files and one umbrella target:
+
+- `cortex-core.service` — FastAPI orchestrator + safety stack (audit
+  SQLite lives at `/var/lib/humanoid-robot/safety_audit.sqlite`)
+- `cortex-robot-adapter.service` — dispatcher + telemetry pump
+  (`unitree_g1_edu` on the robot; `mock` on the bench)
+- `cortex-voice.service` — mic → VAD/wake/ASR pipeline + TTS speaker
+- `cortex-rag.service` — grounded QA (LLM + retrieval + guardrails)
+- `humanoid-robot.target` — one-shot start/stop for all four
+
+Every unit is hardened (`NoNewPrivileges`, `ProtectSystem=strict`,
+`ProtectHome`, `PrivateTmp`, kernel/cgroup protections) and runs as
+the `humanoid-robot` system user. Only these paths are writable:
+
+- `/var/lib/humanoid-robot` — models, RAG state, audit DB
+- `/var/log/humanoid-robot` — reserved for future direct-file logs
+  (default is journald)
+
+### Install
+
+```bash
+git clone https://github.com/Amtilan/humanoid-robot.git /tmp/humanoid-robot
+cd /tmp/humanoid-robot
+sudo bash deploy/scripts/bootstrap-jetson.sh
+```
+
+`bootstrap-jetson.sh` is idempotent: creates the user, sets up the
+state dirs, installs the units + reference env files (never
+overwrites), and reloads systemd. It DOES NOT start the services —
+you review `/etc/humanoid-robot/*.env` first, install `nats-server`,
+then:
+
+```bash
+sudo systemctl enable --now nats-server humanoid-robot.target
+journalctl -u cortex-core -u cortex-robot-adapter -u cortex-voice -u cortex-rag -f
+```
+
+### Env-file overrides
+
+Each service reads
+`EnvironmentFile=-/etc/humanoid-robot/<service>.env` (the `-` means
+optional for core/adapter, mandatory for voice/rag because they need
+model paths).  The `.example` files under `deploy/config/` document
+every knob; they get installed with mode `0640` owned by
+`root:humanoid-robot` so credentials never leak to the world.
+
+### Reference paths
+
+| Path | Purpose |
+|------|---------|
+| `/opt/humanoid-robot`           | Cloned release + `uv sync`'d `.venv` |
+| `/etc/humanoid-robot/*.env`     | Per-service env overrides |
+| `/var/lib/humanoid-robot/models`| LLM/ASR/TTS/embedder weights |
+| `/var/lib/humanoid-robot/rag`   | RAG working data (Qdrant if colocated) |
+| `/var/lib/humanoid-robot/safety_audit.sqlite` | Audit log |
+| `/var/log/humanoid-robot`       | Reserved (services log to journald) |

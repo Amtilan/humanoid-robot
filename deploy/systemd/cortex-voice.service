@@ -1,0 +1,46 @@
+# /etc/systemd/system/cortex-voice.service
+#
+# Voice pipeline: mic → VAD → wake → ASR → publish asr.final, and
+# LlmAnswer → TTS → speaker. Needs the model bundles listed in
+# /etc/humanoid-robot/cortex-voice.env (faster-whisper, silero-vad,
+# piper voice, optional openwakeword).
+
+[Unit]
+Description=humanoid-robot voice runner
+After=network-online.target nats-server.service cortex-core.service cortex-robot-adapter.service
+Wants=network-online.target
+Requires=nats-server.service
+
+[Service]
+Type=exec
+User=humanoid-robot
+Group=humanoid-robot
+WorkingDirectory=/opt/humanoid-robot
+Environment=PATH=/opt/humanoid-robot/.venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HR_VOICE__NATS__SERVERS=["nats://127.0.0.1:4222"]
+EnvironmentFile=/etc/humanoid-robot/cortex-voice.env
+
+ExecStart=/opt/humanoid-robot/.venv/bin/cortex-voice run --config /etc/humanoid-robot/voice.yaml
+
+Restart=on-failure
+RestartSec=5s
+
+# Audio device access — the XMOS mic array and G1 head speaker both need
+# ALSA/DDS; grant supplementary group for /dev/snd or route via DDS.
+SupplementaryGroups=audio
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+
+ReadWritePaths=/var/log/humanoid-robot /var/lib/humanoid-robot/models
+
+[Install]
+WantedBy=multi-user.target
