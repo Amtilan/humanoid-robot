@@ -151,10 +151,115 @@ jobs:
           echo "digest_${{ matrix.image.name }}=${{ steps.build.outputs.digest }}" \
               >> "$GITHUB_OUTPUT"
 
+  # Real Unitree G1 adapter image. Separate job (not a matrix entry in
+  # `build`) because it FROMs the base image that job just pushed, so it
+  # must run AFTER it. arm64-only: it only ever runs on the Jetson, and
+  # the CycloneDDS C build under QEMU is slow enough without also doing
+  # amd64. Same sign + sig-flip treatment as the base images.
+  build-adapter:
+    name: build+push (humanoid-robot-adapter-unitree)
+    runs-on: ubuntu-24.04
+    needs: build
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Normalise owner
+        run: |
+          echo "IMAGE_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" \
+              >> "$GITHUB_ENV"
+
+      - name: Resolve base image tag (this run's sha)
+        id: base
+        run: |
+          short=${GITHUB_SHA:0:7}
+          echo "image=${REGISTRY}/${IMAGE_OWNER}/humanoid-robot-base:sha-${short}" \
+              >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags + labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/humanoid-robot-adapter-unitree
+          tags: |
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=humanoid-robot-adapter-unitree
+            org.opencontainers.image.description=Unitree G1 adapter image (vendor SDK + CycloneDDS)
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: Build + push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/adapter-unitree.Dockerfile
+          platforms: linux/arm64
+          push: true
+          build-args: |
+            BASE_IMAGE=${{ steps.base.outputs.image }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=humanoid-robot-adapter-unitree
+          cache-to: type=gha,mode=max,scope=humanoid-robot-adapter-unitree
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: "v2.4.1"
+
+      - name: Sign image (keyless, via GitHub OIDC)
+        env:
+          COSIGN_YES: "true"
+          DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/humanoid-robot-adapter-unitree
+        run: |
+          echo "signing ${IMAGE}@${DIGEST}"
+          cosign sign --recursive "${IMAGE}@${DIGEST}"
+
+      - name: Make signature package public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PACKAGE: humanoid-robot-adapter-unitree
+        run: |
+          set -u
+          sig_object="${PACKAGE}/${DIGEST/sha256:/sha256-}.sig"
+          sig_path="${sig_object//\//%2F}"
+          echo "flipping visibility → public for /user/packages/container/${sig_path}"
+          if ! gh api --method PATCH \
+              -H "Accept: application/vnd.github+json" \
+              "/user/packages/container/${sig_path}" \
+              -f visibility=public 2>&1 | tee /tmp/gh-flip.log; then
+              echo "::warning::visibility flip failed for ${sig_object}"
+              echo "::warning::flip it manually at https://github.com/users/${IMAGE_OWNER}/packages/container/${sig_path}/settings"
+          fi
+
   scan:
     name: trivy scan (${{ matrix.image.name }})
     runs-on: ubuntu-24.04
-    needs: build
+    needs: [build, build-adapter]
     permissions:
       contents: read
       packages: read
@@ -165,6 +270,7 @@ jobs:
         image:
           - name: humanoid-robot-base
           - name: humanoid-robot-dashboard
+          - name: humanoid-robot-adapter-unitree
     steps:
       - uses: actions/checkout@v4
 
@@ -228,7 +334,7 @@ jobs:
   sbom:
     name: syft SBOM (${{ matrix.image.name }})
     runs-on: ubuntu-24.04
-    needs: build
+    needs: [build, build-adapter]
     permissions:
       contents: read
       packages: read
@@ -238,6 +344,7 @@ jobs:
         image:
           - name: humanoid-robot-base
           - name: humanoid-robot-dashboard
+          - name: humanoid-robot-adapter-unitree
     steps:
       - name: Normalise owner
         run: |
@@ -276,7 +383,7 @@ jobs:
   verify:
     name: verify signature (${{ matrix.image.name }})
     runs-on: ubuntu-24.04
-    needs: build
+    needs: [build, build-adapter]
     permissions:
       contents: read
       packages: read
@@ -287,6 +394,7 @@ jobs:
         image:
           - name: humanoid-robot-base
           - name: humanoid-robot-dashboard
+          - name: humanoid-robot-adapter-unitree
     steps:
       - name: Normalise owner
         run: |
