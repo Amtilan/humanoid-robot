@@ -208,6 +208,25 @@ export function SafetyPage() {
               L2 norm of linear_x + linear_y is compared.
             </p>
           </Card>
+          <Card title="Per-actor budgets">
+            <ul className="space-y-0.5 text-xs">
+              {Object.entries(status.data.actor_budgets).map(([name, b]) => (
+                <li key={name} className="flex justify-between font-mono text-[11px]">
+                  <span>{name}</span>
+                  <span className="text-muted-foreground">
+                    {b.max_events}/{b.window_s}s
+                  </span>
+                </li>
+              ))}
+              <li className="flex justify-between font-mono text-[11px] text-muted-foreground">
+                <span>default</span>
+                <span>
+                  {status.data.actor_default_budget.max_events}/
+                  {status.data.actor_default_budget.window_s}s
+                </span>
+              </li>
+            </ul>
+          </Card>
         </div>
       )}
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -39,6 +39,15 @@ class ObservabilitySettings(BaseModel):
     tracing_enabled: bool = True
 
 
+class ActorBudget(BaseModel):
+    """Sliding-window rate budget for a single submitter class."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    window_s: float = Field(gt=0.0)
+    max_events: int = Field(ge=0)
+
+
 class SafetySettings(BaseModel):
     """Safety gate configuration.
 
@@ -55,6 +64,15 @@ class SafetySettings(BaseModel):
     )
     rate_limit_window_s: float = 5.0
     rate_limit_max_events: int = 20
+    actor_budgets: dict[str, ActorBudget] = Field(
+        default_factory=lambda: {
+            "operator": ActorBudget(window_s=60.0, max_events=60),
+            "llm": ActorBudget(window_s=60.0, max_events=10),
+            "plugin": ActorBudget(window_s=60.0, max_events=20),
+            "test": ActorBudget(window_s=60.0, max_events=100),
+        }
+    )
+    actor_default_budget: ActorBudget = ActorBudget(window_s=60.0, max_events=5)
     watchdog_timeout_s: float = 5.0
     watchdog_check_interval_s: float = 1.0
     command_timeout_s: float = 3.0

@@ -24,11 +24,13 @@ from humanoid_robot.observability import PromMetrics
 from humanoid_robot.plugins_sdk import PluginRegistry
 from humanoid_robot.ports import EventBusPort, Subscription
 from humanoid_robot.safety import (
+    ActorRateLimit,
     ChainPolicy,
     CommandReconciler,
     EStopPolicy,
     EStopState,
     KnownCapabilitiesPolicy,
+    PerActorRateLimitPolicy,
     RateLimitPolicy,
     SafetyAuditRecorder,
     SafetyGate,
@@ -90,12 +92,23 @@ class AppContainer:
         await diagnostics_ticker.start()
 
         estop = EStopState(engaged=True)
+        actor_limits = {
+            name: ActorRateLimit(window_s=budget.window_s, max_events=budget.max_events)
+            for name, budget in settings.safety.actor_budgets.items()
+        }
         safety_policy = ChainPolicy(
             [
                 KnownCapabilitiesPolicy(allowed=frozenset(settings.safety.allowed_capabilities)),
                 VelocityLimitPolicy(
                     max_linear_speed_mps=settings.safety.max_linear_speed_mps,
                     max_angular_rate_rps=settings.safety.max_angular_rate_rps,
+                ),
+                PerActorRateLimitPolicy(
+                    limits=actor_limits,
+                    default=ActorRateLimit(
+                        window_s=settings.safety.actor_default_budget.window_s,
+                        max_events=settings.safety.actor_default_budget.max_events,
+                    ),
                 ),
                 RateLimitPolicy(
                     window_s=settings.safety.rate_limit_window_s,

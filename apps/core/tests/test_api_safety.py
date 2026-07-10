@@ -147,6 +147,14 @@ class TestSafetyApi:
         assert body["pending_command_count"] == 0
         assert body["pending_command_ids"] == []
 
+    def test_status_reports_actor_budgets(self, app: FastAPI) -> None:
+        with TestClient(app) as client:
+            resp = client.get("/api/v1/safety/status")
+        body = resp.json()
+        assert "operator" in body["actor_budgets"]
+        assert "llm" in body["actor_budgets"]
+        assert body["actor_default_budget"]["max_events"] >= 0
+
     def test_audit_records_engage_release_flow(self, app: FastAPI) -> None:
         with TestClient(app) as client:
             client.post("/api/v1/safety/estop/release", json={"actor": "audit-op"})

@@ -75,6 +75,56 @@ class RateLimitPolicy:
 
 
 @dataclass(slots=True)
+class ActorRateLimit:
+    """Sliding-window budget for one submitter bucket."""
+
+    window_s: float
+    max_events: int
+
+
+@dataclass(slots=True)
+class PerActorRateLimitPolicy:
+    """Sliding-window rate limit keyed by ``submitter``.
+
+    ``limits`` maps a submitter string to its budget.  If the incoming
+    request's submitter is not in the map, ``default`` is used.  Setting
+    ``default.max_events`` to 0 fails-closed for unknown actors, which
+    matches the platform's overall posture.
+    """
+
+    limits: dict[str, ActorRateLimit]
+    default: ActorRateLimit
+    _events: dict[str, deque[float]] = field(default_factory=dict)
+
+    async def evaluate(self, request: SafetyRequest) -> SafetyDecision:
+        submitter = request.submitter
+        budget = self.limits.get(submitter, self.default)
+        if budget.max_events == 0:
+            return SafetyDecision(
+                verdict="deny",
+                reason=f"actor {submitter!r} has no command budget",
+            )
+        window = self._events.setdefault(submitter, deque())
+        now = time.monotonic()
+        cutoff = now - budget.window_s
+        while window and window[0] < cutoff:
+            window.popleft()
+        if len(window) >= budget.max_events:
+            return SafetyDecision(
+                verdict="deny",
+                reason=(
+                    f"actor {submitter!r} exceeded budget: "
+                    f"{len(window)}/{budget.max_events} in {budget.window_s:.1f}s"
+                ),
+            )
+        window.append(now)
+        return SafetyDecision(
+            verdict="allow",
+            reason=f"actor {submitter!r} within budget",
+        )
+
+
+@dataclass(slots=True)
 class VelocityLimitPolicy:
     """Denies `locomotion.move` commands that exceed configured envelope.
 

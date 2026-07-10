@@ -266,4 +266,6 @@ export interface SafetyStatus {
   pending_command_ids: string[];
   max_linear_speed_mps: number;
   max_angular_rate_rps: number;
+  actor_budgets: Record<string, { window_s: number; max_events: number }>;
+  actor_default_budget: { window_s: number; max_events: number };
 }

@@ -31,6 +31,8 @@ class SafetyStatus(BaseModel):
     pending_command_ids: list[str]
     max_linear_speed_mps: float
     max_angular_rate_rps: float
+    actor_budgets: dict[str, dict[str, float]]
+    actor_default_budget: dict[str, float]
 
 
 class EStopRequest(BaseModel):
@@ -76,6 +78,14 @@ async def status(request: Request) -> SafetyStatus:
         pending_command_ids=pending_ids,
         max_linear_speed_mps=settings.max_linear_speed_mps,
         max_angular_rate_rps=settings.max_angular_rate_rps,
+        actor_budgets={
+            name: {"window_s": budget.window_s, "max_events": float(budget.max_events)}
+            for name, budget in settings.actor_budgets.items()
+        },
+        actor_default_budget={
+            "window_s": settings.actor_default_budget.window_s,
+            "max_events": float(settings.actor_default_budget.max_events),
+        },
     )
 
 
