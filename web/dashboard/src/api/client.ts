@@ -237,4 +237,7 @@ export interface SafetyStatus {
   watchdog_timeout_s: number;
   watchdog_live: boolean;
   watchdog_seconds_since_heartbeat: number | null;
+  command_timeout_s: number;
+  pending_command_count: number;
+  pending_command_ids: string[];
 }

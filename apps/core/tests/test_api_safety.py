@@ -19,6 +19,7 @@ from humanoid_robot.observability import PromMetrics
 from humanoid_robot.plugins_sdk import PluginRegistry
 from humanoid_robot.safety import (
     ChainPolicy,
+    CommandReconciler,
     EStopPolicy,
     EStopState,
     KnownCapabilitiesPolicy,
@@ -50,6 +51,12 @@ def app() -> FastAPI:
         timeout_s=settings.safety.watchdog_timeout_s,
         check_interval_s=settings.safety.watchdog_check_interval_s,
     )
+    reconciler = CommandReconciler(
+        gate=gate,
+        bus=bus,
+        timeout_s=settings.safety.command_timeout_s,
+        check_interval_s=settings.safety.command_check_interval_s,
+    )
     container = AppContainer(
         settings=settings,
         event_bus=bus,
@@ -59,6 +66,7 @@ def app() -> FastAPI:
         robot_manifest_cache=RobotManifestCache(),
         safety_gate=gate,
         safety_watchdog=watchdog,
+        safety_reconciler=reconciler,
     )
 
     @asynccontextmanager
@@ -125,3 +133,11 @@ class TestSafetyApi:
         assert "watchdog_timeout_s" in body
         assert body["watchdog_live"] is False
         assert body["watchdog_seconds_since_heartbeat"] is None
+
+    def test_status_reports_reconciler_fields(self, app: FastAPI) -> None:
+        with TestClient(app) as client:
+            resp = client.get("/api/v1/safety/status")
+        body = resp.json()
+        assert "command_timeout_s" in body
+        assert body["pending_command_count"] == 0
+        assert body["pending_command_ids"] == []

@@ -25,6 +25,7 @@ from humanoid_robot.plugins_sdk import PluginRegistry
 from humanoid_robot.ports import EventBusPort, Subscription
 from humanoid_robot.safety import (
     ChainPolicy,
+    CommandReconciler,
     EStopPolicy,
     EStopState,
     KnownCapabilitiesPolicy,
@@ -53,6 +54,7 @@ class AppContainer:
     safety_gate: SafetyGate | None = field(default=None)
     safety_task: asyncio.Task[None] | None = field(default=None)
     safety_watchdog: SafetyWatchdog | None = field(default=None)
+    safety_reconciler: CommandReconciler | None = field(default=None)
     _manifest_subscription: Subscription | None = field(default=None)
 
     @classmethod
@@ -106,6 +108,14 @@ class AppContainer:
         )
         await safety_watchdog.start()
 
+        safety_reconciler = CommandReconciler(
+            gate=safety_gate,
+            bus=bus,
+            timeout_s=settings.safety.command_timeout_s,
+            check_interval_s=settings.safety.command_check_interval_s,
+        )
+        await safety_reconciler.start()
+
         return cls(
             settings=settings,
             event_bus=bus,
@@ -118,6 +128,7 @@ class AppContainer:
             safety_gate=safety_gate,
             safety_task=safety_task,
             safety_watchdog=safety_watchdog,
+            safety_reconciler=safety_reconciler,
             _manifest_subscription=manifest_subscription,
         )
 
@@ -127,6 +138,9 @@ class AppContainer:
         if self.diagnostics_ticker is not None:
             await self.diagnostics_ticker.stop()
             self.diagnostics_ticker = None
+        if self.safety_reconciler is not None:
+            await self.safety_reconciler.stop()
+            self.safety_reconciler = None
         if self.safety_watchdog is not None:
             await self.safety_watchdog.stop()
             self.safety_watchdog = None

@@ -10,6 +10,7 @@ const isSafetySubject = (subject: string) =>
   subject === "safety.estop.released" ||
   subject === "safety.command.denied" ||
   subject === "safety.command.forwarded" ||
+  subject === "safety.command.timeout" ||
   subject === "safety.watchdog.heartbeat";
 
 const MAX_TAPE = 40;
@@ -153,6 +154,30 @@ export function SafetyPage() {
                 ? "no heartbeat yet"
                 : `${status.data.watchdog_seconds_since_heartbeat.toFixed(1)} s ago`}
             </p>
+          </Card>
+          <Card title="Reconciler">
+            <div className="flex items-center gap-2 text-sm">
+              <span
+                className={
+                  status.data.pending_command_count > 0
+                    ? "inline-block h-2 w-2 animate-pulse rounded-full bg-sky-400"
+                    : "inline-block h-2 w-2 rounded-full bg-emerald-500"
+                }
+              />
+              <span>
+                {status.data.pending_command_count} pending
+              </span>
+            </div>
+            <p className="pt-1 text-xs text-muted-foreground">
+              timeout {status.data.command_timeout_s.toFixed(1)} s → auto e-stop
+            </p>
+            {status.data.pending_command_ids.length > 0 && (
+              <ul className="mt-2 space-y-0.5 text-[10px] text-muted-foreground">
+                {status.data.pending_command_ids.map((id) => (
+                  <li key={id} className="font-mono">{id}</li>
+                ))}
+              </ul>
+            )}
           </Card>
           <Card title="Allowed capabilities">
             {status.data.allowed_capabilities.length === 0 ? (

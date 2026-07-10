@@ -57,6 +57,8 @@ class SafetySettings(BaseModel):
     rate_limit_max_events: int = 20
     watchdog_timeout_s: float = 5.0
     watchdog_check_interval_s: float = 1.0
+    command_timeout_s: float = 3.0
+    command_check_interval_s: float = 0.5
 
 
 class CoreSettings(BaseSettings):

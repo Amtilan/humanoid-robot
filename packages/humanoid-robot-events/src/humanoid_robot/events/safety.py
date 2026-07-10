@@ -60,3 +60,18 @@ class SafetyWatchdogHeartbeat(BaseEvent):
     schema_version: ClassVar[int] = 1
 
     actor: str
+
+
+class SafetyCommandTimeout(BaseEvent):
+    """A forwarded command never received a `robot.command.result`.
+
+    The reconciler emits this alongside auto-engaging the e-stop; the
+    adapter may be hung, disconnected, or crashed.
+    """
+
+    subject: ClassVar[str] = "safety.command.timeout"
+    schema_version: ClassVar[int] = 1
+
+    command_id: str
+    capability: str
+    elapsed_s: float

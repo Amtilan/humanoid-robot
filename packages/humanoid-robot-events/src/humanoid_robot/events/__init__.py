@@ -10,6 +10,7 @@ from humanoid_robot.events.robot import (
 from humanoid_robot.events.safety import (
     SafetyCommandDenied,
     SafetyCommandForwarded,
+    SafetyCommandTimeout,
     SafetyEStopEngaged,
     SafetyEStopReleased,
     SafetyWatchdogHeartbeat,
@@ -51,6 +52,7 @@ __all__ = [
     "RobotTelemetry",
     "SafetyCommandDenied",
     "SafetyCommandForwarded",
+    "SafetyCommandTimeout",
     "SafetyEStopEngaged",
     "SafetyEStopReleased",
     "SafetyWatchdogHeartbeat",

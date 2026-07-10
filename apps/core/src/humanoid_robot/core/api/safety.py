@@ -25,6 +25,9 @@ class SafetyStatus(BaseModel):
     watchdog_timeout_s: float
     watchdog_live: bool
     watchdog_seconds_since_heartbeat: float | None
+    command_timeout_s: float
+    pending_command_count: int
+    pending_command_ids: list[str]
 
 
 class EStopRequest(BaseModel):
@@ -54,6 +57,9 @@ async def status(request: Request) -> SafetyStatus:
     if watchdog is not None:
         watchdog_live = await watchdog.is_live()
         seconds_since = await watchdog.seconds_since_heartbeat()
+    reconciler = container.safety_reconciler
+    pending_count = reconciler.pending_count() if reconciler is not None else 0
+    pending_ids = list(reconciler.pending_ids()) if reconciler is not None else []
     return SafetyStatus(
         estop_engaged=engaged,
         allowed_capabilities=list(settings.allowed_capabilities),
@@ -62,6 +68,9 @@ async def status(request: Request) -> SafetyStatus:
         watchdog_timeout_s=settings.watchdog_timeout_s,
         watchdog_live=watchdog_live,
         watchdog_seconds_since_heartbeat=seconds_since,
+        command_timeout_s=settings.command_timeout_s,
+        pending_command_count=pending_count,
+        pending_command_ids=pending_ids,
     )
 
 
