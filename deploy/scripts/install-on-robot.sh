@@ -102,11 +102,22 @@ bootstrap_cosign() {
     chmod +x "${dest}"
 }
 
+# True iff we can reach GHCR at all. Deliberately does NOT use curl -f:
+# https://ghcr.io/v2/ answers 401 (auth required) when reachable, and
+# -f would mistake that for failure. Any HTTP status back (code != 000)
+# means the TCP+TLS path is up; 000 means no route / no DNS / timeout.
+_online() {
+    local code
+    code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
+        https://ghcr.io/v2/ 2>/dev/null || echo 000)
+    [[ "${code}" != "000" ]]
+}
+
 # If the current default route can't actually reach GHCR, look for
 # another default-route interface that CAN and add a low-metric default
 # via it. Records the exact route in _EGRESS_ROUTE for revert_egress.
 fix_egress() {
-    if curl -fsSL -o /dev/null --max-time 8 https://ghcr.io/v2/ 2>/dev/null; then
+    if _online; then
         echo "egress already works — no route change needed."
         return 0
     fi
@@ -118,8 +129,7 @@ fix_egress() {
             echo "  ${dev} (via ${gw}) has internet — adding metric-50 default"
             if ip route add default via "${gw}" dev "${dev}" metric 50 2>/dev/null; then
                 _EGRESS_ROUTE="default via ${gw} dev ${dev} metric 50"
-                # Give resolddns a beat; verify we actually reach GHCR now.
-                if curl -fsSL -o /dev/null --max-time 8 https://ghcr.io/v2/ 2>/dev/null; then
+                if _online; then
                     echo "  egress restored via ${dev}."
                     return 0
                 fi
