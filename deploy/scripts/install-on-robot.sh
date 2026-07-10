@@ -95,7 +95,7 @@ main() {
     fetch deploy/observability/grafana/dashboards/platform.json \
         "${CONFIG_DIR}/observability/grafana/dashboards/platform.json"
 
-    for env in cortex-core cortex-robot-adapter cortex-voice cortex-rag; do
+    for env in cortex-core cortex-robot-adapter cortex-voice cortex-rag alertmanager; do
         local src="deploy/config/${env}.env.example"
         local dst="${CONFIG_DIR}/${env}.env"
         if [[ -e "${dst}" ]]; then
@@ -178,6 +178,10 @@ Enable voice + RAG (~9.5 GB of models pulled from Hugging Face):
 
 Enable observability (Prometheus + Grafana on 127.0.0.1:{9090,3000}):
   docker compose --profile metrics up -d
+
+Route alerts to Slack / Discord / ntfy / webhook:
+  sudo \$EDITOR ${CONFIG_DIR}/alertmanager.env   # uncomment a block, set URL
+  docker compose --profile metrics restart alertmanager
 
 Nightly backup (audit DB + Qdrant knowledge collection):
   sudo cp deploy/systemd/humanoid-robot-backup.{service,timer} /etc/systemd/system/

@@ -126,11 +126,19 @@ docker compose --profile metrics up -d
   alerts to Alertmanager. `--web.enable-lifecycle` is on so
   `curl -X POST http://localhost:9090/-/reload` picks up rule edits
   without restarting the container.
-- Alertmanager → http://localhost:9093/ — routes alerts. Ships with a
-  no-op webhook receiver; wire in your own Slack / Discord / ntfy /
-  email by editing `alertmanager.yml`. Critical alerts repeat every
-  5 min, warnings every 30 min. Inhibit rules stop CPU/memory alerts
-  when the whole process is down.
+- Alertmanager → http://localhost:9093/ — routes alerts. Default
+  receiver logs every alert to the container's stdout. Switch to a
+  real notifier by editing `/etc/humanoid-robot/alertmanager.env`
+  (see `deploy/config/alertmanager.env.example`): uncomment the
+  block for `slack` / `discord` / `ntfy` / `webhook`, set the
+  webhook URL, restart alertmanager. Critical alerts repeat every
+  5 min, warnings every 30 min. Inhibit rules stop CPU/memory
+  alerts when the whole process is down.
+
+  ```bash
+  sudo $EDITOR /etc/humanoid-robot/alertmanager.env
+  docker compose --profile metrics restart alertmanager
+  ```
 - Grafana     → http://localhost:3000/ — anonymous viewer role is on
   so you can drop into the dashboard without logging in;
   admin/admin gets you edit mode. The "humanoid-robot platform"

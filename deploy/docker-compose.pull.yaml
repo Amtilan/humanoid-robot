@@ -165,6 +165,13 @@ services:
     command:
       - "--config.file=/etc/alertmanager/alertmanager.yml"
       - "--storage.path=/alertmanager"
+      # Expands ${VAR} references inside alertmanager.yml against the
+      # process env, so secret webhook URLs stay out of the config
+      # bind-mount.
+      - "--config.expand-env=true"
+    env_file:
+      - path: /etc/humanoid-robot/alertmanager.env
+        required: false
     volumes:
       - /etc/humanoid-robot/observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager

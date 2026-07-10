@@ -1,18 +1,25 @@
 # Alertmanager routing for the humanoid-robot compose stack.
 #
-# Ships with a "log only" receiver — every firing alert is written to
-# the alertmanager container's stdout. Wire in a real notifier (Slack,
-# Discord, PagerDuty, ntfy, email) by editing the `receivers` block
-# and pointing the appropriate route.  Keep secrets out of git; drop
-# them into /etc/humanoid-robot/alertmanager.env and reference via
-# EnvironmentFile= or docker `env_file:` when you graduate off the
-# stub receiver.
+# Selecting a notifier is a runtime decision — pick one via
+# ALERTMANAGER_RECEIVER in /etc/humanoid-robot/alertmanager.env (see
+# deploy/config/alertmanager.env.example).  Values:
+#
+#   log       — default. Every firing alert goes to alertmanager's
+#               stdout via a no-op webhook.
+#   slack     — Slack incoming webhook (SLACK_WEBHOOK_URL).
+#   discord   — Discord webhook (DISCORD_WEBHOOK_URL).
+#   ntfy      — ntfy.sh topic (NTFY_URL, NTFY_TOPIC optional
+#               precomposed into NTFY_URL).
+#   webhook   — generic HTTP POST to WEBHOOK_URL.
+#
+# Templates below use ${VAR}-style interpolation; alertmanager reads
+# them because compose runs the process with `--config.expand-env`.
 
 global:
   resolve_timeout: 5m
 
 route:
-  receiver: log
+  receiver: ${ALERTMANAGER_RECEIVER:-log}
   group_by: ["alertname"]
   group_wait: 15s
   group_interval: 1m
@@ -20,15 +27,75 @@ route:
   routes:
     - matchers:
         - severity="critical"
-      receiver: log
+      receiver: ${ALERTMANAGER_RECEIVER:-log}
       repeat_interval: 5m
 
 receivers:
+  # ------------------------------------------------------------------
+  # Default: writes to alertmanager's own log via a no-op webhook.
+  # ------------------------------------------------------------------
   - name: log
-    # webhook_configs pointed at /dev/null-equivalent so alertmanager
-    # still executes the pipeline; swap in your notifier when ready.
     webhook_configs:
       - url: http://127.0.0.1:9099/noop
+        send_resolved: true
+
+  # ------------------------------------------------------------------
+  # Slack: create an incoming webhook at
+  # https://api.slack.com/messaging/webhooks and put the URL in
+  # SLACK_WEBHOOK_URL. SLACK_CHANNEL is optional (webhook already
+  # binds the channel; supply only if you want to override per-alert).
+  # ------------------------------------------------------------------
+  - name: slack
+    slack_configs:
+      - api_url: ${SLACK_WEBHOOK_URL}
+        channel: ${SLACK_CHANNEL:-}
+        send_resolved: true
+        title: |-
+          [{{ .Status | toUpper }}] humanoid-robot — {{ .CommonLabels.alertname }} (x{{ len .Alerts }})
+        text: |-
+          {{ range .Alerts }}
+          *Severity*: {{ .Labels.severity }}
+          *Summary*: {{ .Annotations.summary }}
+          *Description*: {{ .Annotations.description }}
+          {{ if .Annotations.runbook }}*Runbook*:
+          ```
+          {{ .Annotations.runbook }}
+          ```{{ end }}
+          {{ end }}
+
+  # ------------------------------------------------------------------
+  # Discord: use a Discord webhook URL. Discord accepts Slack-format
+  # payloads at the /slack suffix, so we reuse the Slack template.
+  # Example URL: https://discord.com/api/webhooks/…/…/slack
+  # ------------------------------------------------------------------
+  - name: discord
+    slack_configs:
+      - api_url: ${DISCORD_WEBHOOK_URL}
+        send_resolved: true
+        title: |-
+          [{{ .Status | toUpper }}] humanoid-robot — {{ .CommonLabels.alertname }} (x{{ len .Alerts }})
+        text: |-
+          {{ range .Alerts }}
+          Severity: {{ .Labels.severity }}
+          Summary: {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ end }}
+
+  # ------------------------------------------------------------------
+  # ntfy: self-hostable HTTP notification. NTFY_URL should already
+  # include the topic (e.g. https://ntfy.sh/my-robot-topic).
+  # ------------------------------------------------------------------
+  - name: ntfy
+    webhook_configs:
+      - url: ${NTFY_URL}
+        send_resolved: true
+
+  # ------------------------------------------------------------------
+  # Generic webhook: whatever accepts alertmanager's JSON envelope.
+  # ------------------------------------------------------------------
+  - name: webhook
+    webhook_configs:
+      - url: ${WEBHOOK_URL}
         send_resolved: true
 
 inhibit_rules:
