@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 
 from humanoid_robot.adapters.unitree_g1.lowstate import (
     G1LowStateReader,
@@ -25,7 +26,7 @@ def _motor(t0: int, t1: int = 0) -> SimpleNamespace:
     return SimpleNamespace(temperature=[t0, t1])
 
 
-def _lowstate(imu: object, motors: list[object]) -> SimpleNamespace:
+def _lowstate(imu: object, motors: list[Any]) -> SimpleNamespace:
     return SimpleNamespace(imu_state=imu, motor_state=motors)
 
 

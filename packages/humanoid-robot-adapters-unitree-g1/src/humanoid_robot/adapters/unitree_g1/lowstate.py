@@ -20,6 +20,7 @@ dedicated BMS topic is wired.
 
 from __future__ import annotations
 
+import contextlib
 import threading
 from typing import Any
 
@@ -29,13 +30,17 @@ _LOG = get_logger("cortex-adapters.g1.lowstate")
 
 LOWSTATE_TOPIC = "rt/lowstate"
 
+# Minimum array lengths before we trust a vendor IMU field.
+_VEC3 = 3  # rpy / gyroscope / accelerometer
+_QUAT = 4  # quaternion (w, x, y, z)
 
-def _seq(value: object) -> list[float]:
+
+def _seq(value: Any) -> list[float]:  # noqa: ANN401 -- vendor arrays are untyped
     """Coerce a CycloneDDS array (or any iterable) to a list of floats."""
     if value is None:
         return []
     try:
-        return [float(x) for x in value]  # type: ignore[union-attr]
+        return [float(x) for x in value]
     except (TypeError, ValueError):
         return []
 
@@ -47,16 +52,16 @@ def decode_imu(msg: Any) -> dict[str, float]:  # noqa: ANN401 -- vendor msg is u
         return {}
     out: dict[str, float] = {}
     rpy = _seq(getattr(imu, "rpy", None))
-    if len(rpy) >= 3:
+    if len(rpy) >= _VEC3:
         out["roll_rad"], out["pitch_rad"], out["yaw_rad"] = rpy[0], rpy[1], rpy[2]
     gyro = _seq(getattr(imu, "gyroscope", None))
-    if len(gyro) >= 3:
+    if len(gyro) >= _VEC3:
         out["gyro_x"], out["gyro_y"], out["gyro_z"] = gyro[0], gyro[1], gyro[2]
     acc = _seq(getattr(imu, "accelerometer", None))
-    if len(acc) >= 3:
+    if len(acc) >= _VEC3:
         out["accel_x"], out["accel_y"], out["accel_z"] = acc[0], acc[1], acc[2]
     quat = _seq(getattr(imu, "quaternion", None))
-    if len(quat) >= 4:
+    if len(quat) >= _QUAT:
         out["quat_w"], out["quat_x"], out["quat_y"], out["quat_z"] = (
             quat[0],
             quat[1],
@@ -73,10 +78,8 @@ def decode_temperature(msg: Any) -> dict[str, float]:  # noqa: ANN401
     if imu is not None:
         board = getattr(imu, "temperature", None)
         if board is not None:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 out["imu"] = float(board)
-            except (TypeError, ValueError):
-                pass
     motors = getattr(msg, "motor_state", None) or []
     temps: list[float] = []
     for m in motors:
@@ -92,8 +95,12 @@ def decode_temperature(msg: Any) -> dict[str, float]:  # noqa: ANN401
 def _load_lowstate_types() -> tuple[Any, Any]:
     """Deferred SDK import — kept out of module import so this file loads
     off-robot (CI, dev laptops) where the vendor SDK is absent."""
-    from unitree_sdk2py.core.channel import ChannelSubscriber
-    from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+    from unitree_sdk2py.core.channel import (  # type: ignore[import-not-found]
+        ChannelSubscriber,
+    )
+    from unitree_sdk2py.idl.unitree_hg.msg.dds_ import (  # type: ignore[import-not-found]
+        LowState_,
+    )
 
     return ChannelSubscriber, LowState_
 
