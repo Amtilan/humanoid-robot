@@ -17,7 +17,10 @@ from humanoid_robot.domain.voice import AudioFormat
 from humanoid_robot.ports.robot import AudioFrame
 
 _G1_FORMAT = AudioFormat(sample_rate_hz=16_000, channels=1, sample_width_bytes=2)
-_WRONG_FORMAT = AudioFormat(sample_rate_hz=48_000, channels=1, sample_width_bytes=2)
+# Different rate (mono 16-bit) is auto-resampled; only channel/width
+# mismatches are refused.
+_RESAMPLE_FORMAT = AudioFormat(sample_rate_hz=22_050, channels=1, sample_width_bytes=2)
+_WRONG_FORMAT = AudioFormat(sample_rate_hz=16_000, channels=2, sample_width_bytes=2)
 
 
 @dataclass(slots=True)
@@ -62,7 +65,14 @@ def _frame(size: int, fmt: AudioFormat = _G1_FORMAT) -> AudioFrame:
 
 
 class TestUnitreeG1AudioOut:
-    async def test_rejects_wrong_format(self) -> None:
+    async def test_resamples_rate_mismatch(self) -> None:
+        handles, fake = _mk_handles()
+        out = UnitreeG1AudioOut(_sdk=handles)
+        # 22050 Hz piper frame → resampled to 16 kHz and played.
+        await out.play(_frame(4410, fmt=_RESAMPLE_FORMAT))
+        assert fake.chunks  # produced 16 kHz chunks
+
+    async def test_rejects_non_resamplable_format(self) -> None:
         handles, _ = _mk_handles()
         out = UnitreeG1AudioOut(_sdk=handles)
         with pytest.raises(AudioFormatMismatchError):

@@ -11,8 +11,16 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import time
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
+
+# audioop is stdlib on 3.12 (removed in 3.13; add the `audioop-lts` shim
+# then). Importing it emits a DeprecationWarning that the test suite treats
+# as an error, so silence just this import.
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", DeprecationWarning)
+    import audioop
 
 from humanoid_robot.adapters.unitree_g1.sdk import (
     SdkHandles,
@@ -57,6 +65,10 @@ class UnitreeG1AudioOut:
     _stream_id: str = field(default="")
     _next_send_monotonic: float = field(default=0.0)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    # audioop.ratecv filter state, carried across frames of one utterance so
+    # resampling stays continuous (no per-frame clicks). Reset on stop().
+    _resample_state: Any = field(default=None)
+    _resample_src_rate: int = field(default=0)
 
     def attach_client(self, client: Any) -> None:
         """Test hook: inject a fake AudioClient (skips vendor SDK)."""
@@ -91,13 +103,7 @@ class UnitreeG1AudioOut:
         return self._client
 
     async def play(self, frame: AudioFrame) -> None:
-        if frame.format != _G1_FORMAT:
-            msg = (
-                f"G1 speaker expects {_G1_FORMAT!r}, got {frame.format!r}. "
-                f"Resample upstream before calling AudioOutPort.play()."
-            )
-            raise AudioFormatMismatchError(msg)
-        pcm = frame.pcm
+        pcm = self._to_g1_pcm(frame)
         async with self._lock:
             try:
                 client = self._ensure_client()
@@ -108,6 +114,33 @@ class UnitreeG1AudioOut:
                 await self._pace_wait_for_next_slot()
                 client.PlayStream(self.app_name, self._stream_id, chunk)
 
+    def _to_g1_pcm(self, frame: AudioFrame) -> bytes:
+        """Coerce a frame to the G1's 16 kHz mono PCM16. Sample-rate
+        differences (e.g. piper's 22050 Hz) are resampled; channel/width
+        differences we refuse rather than guess at."""
+        fmt = frame.format
+        if fmt == _G1_FORMAT:
+            return frame.pcm
+        if fmt.channels != _G1_CHANNELS or fmt.sample_width_bytes != _G1_SAMPLE_WIDTH_BYTES:
+            msg = (
+                f"G1 speaker needs mono 16-bit PCM; got {fmt!r}. Only the "
+                f"sample rate is auto-resampled."
+            )
+            raise AudioFormatMismatchError(msg)
+        if fmt.sample_rate_hz != self._resample_src_rate:
+            # New source rate (new utterance/voice) — restart the filter.
+            self._resample_state = None
+            self._resample_src_rate = fmt.sample_rate_hz
+        converted, self._resample_state = audioop.ratecv(
+            frame.pcm,
+            _G1_SAMPLE_WIDTH_BYTES,
+            _G1_CHANNELS,
+            fmt.sample_rate_hz,
+            _G1_SAMPLE_RATE,
+            self._resample_state,
+        )
+        return converted
+
     async def flush(self) -> None:
         # AudioClient does not expose a public flush; playback drains naturally
         # once the vendor buffer empties.
@@ -115,6 +148,8 @@ class UnitreeG1AudioOut:
 
     async def stop(self) -> None:
         async with self._lock:
+            self._resample_state = None
+            self._resample_src_rate = 0
             if not self._initialised:
                 return
             self._client.PlayStop(self.app_name)

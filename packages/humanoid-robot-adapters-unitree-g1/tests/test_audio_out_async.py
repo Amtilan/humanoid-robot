@@ -75,10 +75,21 @@ async def test_pacing_yields_control_to_event_loop() -> None:
 
 
 @pytest.mark.asyncio
+async def test_rate_mismatch_is_resampled() -> None:
+    client = _FakeAudioClient()
+    audio_out = UnitreeG1AudioOut()
+    audio_out.attach_client(client)
+    # 22050 Hz mono (piper's native rate) → resampled to 16 kHz, played.
+    piper = AudioFormat(sample_rate_hz=22_050, channels=1, sample_width_bytes=2)
+    await audio_out.play(AudioFrame(pcm=b"\x01\x00" * 2205, format=piper, monotonic_ns=0))
+    assert client.played  # something came out (resampled, ~1600-byte chunks)
+
+
 async def test_wrong_format_raises() -> None:
     audio_out = UnitreeG1AudioOut()
     audio_out.attach_client(_FakeAudioClient())
-    bad = AudioFormat(sample_rate_hz=48_000, channels=1, sample_width_bytes=2)
+    # Stereo can't be auto-resampled (only sample rate is), so it's refused.
+    bad = AudioFormat(sample_rate_hz=16_000, channels=2, sample_width_bytes=2)
     with pytest.raises(AudioFormatMismatchError):
         await audio_out.play(AudioFrame(pcm=b"\x00\x00" * 100, format=bad, monotonic_ns=0))
 

@@ -26,7 +26,10 @@
 set -euo pipefail
 
 MODELS_DIR="${MODELS_DIR:-/var/lib/humanoid-robot/models}"
-MODELS="${MODELS:-asr tts wake embedder reranker llm}"
+# `wake` is off by default (wake-word gating disabled in voice.yaml) and its
+# upstream release asset is flaky (404s), so it's not in the default set —
+# add it explicitly (MODELS="... wake") once you supply a working URL.
+MODELS="${MODELS:-asr tts embedder reranker llm}"
 
 # --- Model URLs (edit these to swap versions) ---------------------------------
 # Systran/faster-whisper-large-v3-turbo became gated (401); deepdml's CT2

@@ -44,3 +44,17 @@ services:
         condition: service_healthy
       core:
         condition: service_healthy
+
+  # Voice needs the vendor SDK (G1 speaker AudioClient) AND host networking
+  # (the G1 mic is a UDP multicast on 239.168.123.161 over eth10, and the
+  # speaker inits DDS on eth10). So it runs the adapter image on host net,
+  # exactly like robot-adapter. rag + llama-cpp stay on the bridge and
+  # reach each other by service name; voice only needs NATS (loopback).
+  voice:
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_OWNER:-amtilan}/humanoid-robot-adapter-unitree:${IMAGE_TAG:-main}
+    network_mode: host
+    environment:
+      HR_VOICE__NATS__SERVERS: '["nats://127.0.0.1:4222"]'
+    depends_on:
+      nats:
+        condition: service_healthy
