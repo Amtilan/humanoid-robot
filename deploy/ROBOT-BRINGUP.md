@@ -27,10 +27,20 @@ end-to-end on the device:
   (ACCEPTED) — both gated. The robot stands/balances (operational FSM);
   gated `balance_stand`/postures are wired.
 
-Open follow-ups (not blockers): deploy the `asyncio.to_thread` fix
-(bfa8280) so a slow gesture can't stall the adapter; add release-to-neutral
-between chained gestures; wire stand-up as a fully tested gated sequence
-(the native controller is the tested path for the first stand).
+Open follow-ups (not blockers):
+- `asyncio.to_thread` fix (bfa8280) — DEPLOYED — keeps blocking SDK calls
+  off the event loop.
+- **Gesture chaining is broken at the vendor-SDK level** (verified over 3
+  tours, always exactly 1/N accepted): exactly ONE arm `ExecuteAction`
+  succeeds per adapter session, then every subsequent call HANGS and
+  stalls the shared DDS participant (telemetry freezes too). to_thread
+  doesn't isolate it — the hang is in the vendor DDS session. Recovery =
+  `docker compose restart robot-adapter`. Likely fix to try: a fresh
+  `G1ArmActionClient` per action (we cache one), or a completion
+  handshake between actions. So the platform reliably commands ONE
+  gesture per session; multi-gesture sequencing is an open investigation.
+- Wire stand-up as a fully tested gated sequence (native controller is
+  the tested path for the first stand).
 
 Safety reality learned on hardware: the **hardware** e-stop cuts torque =
 collapse; the **software** gate only blocks future commands (robot keeps
