@@ -221,6 +221,24 @@ proven end-to-end on the real G1. Real actuation is gated behind the
 robot's own operational-state requirements (stand/balance FSM), which is
 a deliberate, separate bring-up.
 
+### Phase B4 — gated posture capability (2026-07-10)
+
+The whole-body FSM transitions (damp/stand/balance) are now a first-class
+`locomotion.posture` capability that runs through the safety gate, not
+ad-hoc direct LocoClient calls. Deployed to the robot (core + adapter).
+
+**First SUCCESSFUL actuation through the full platform**: `POST
+/api/v1/robot/commands {"capability":"locomotion.posture",
+"payload":{"posture":"damp"}}` with the gate released → audit shows
+`requested → forwarded → result outcome=ACCEPTED`. Unlike head.pose /
+arms.gesture (which forwarded but returned hardware_error), Damp actually
+executed. Damp is a soft hold — no stand, no fall. Gate re-engaged after.
+
+Held at the checkpoint before the actual stand: `stand_up → balance_stand`
+physically raises the robot (e-stop = torque cut = collapse), so it needs
+the robot free-standing + an explicit go. But it now runs through the
+gate (estop / schema / rate-limit / audit), not a hack.
+
 ### Phase B — real Unitree adapter (the motion blocker)
 1. Package `unitree_sdk2py` + `cyclonedds` into an **arm64 adapter image
    variant** (they're the missing runtime deps). Pin against the C++ SDK
