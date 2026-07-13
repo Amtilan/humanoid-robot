@@ -29,13 +29,16 @@ MODELS_DIR="${MODELS_DIR:-/var/lib/humanoid-robot/models}"
 MODELS="${MODELS:-asr tts wake embedder reranker llm}"
 
 # --- Model URLs (edit these to swap versions) ---------------------------------
-URL_ASR_TAR="https://huggingface.co/Systran/faster-whisper-large-v3-turbo/resolve/main"
+# Systran/faster-whisper-large-v3-turbo became gated (401); deepdml's CT2
+# conversion of the same model is public and byte-compatible for
+# faster-whisper.
+URL_ASR_TAR="https://huggingface.co/deepdml/faster-whisper-large-v3-turbo-ct2/resolve/main"
 ASR_FILES=(
     "config.json"
     "model.bin"
     "preprocessor_config.json"
     "tokenizer.json"
-    "vocabulary.txt"
+    "vocabulary.json"
 )
 URL_TTS_RU="https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx"
 URL_TTS_RU_JSON="https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx.json"
@@ -62,7 +65,13 @@ RERANK_FILES=(
     "pytorch_model.bin"
 )
 
-URL_LLM="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q5_k_m.gguf"
+# The official Qwen GGUF is split into 2 shards; llama.cpp loads the whole
+# model when pointed at the -00001-of-00002 shard.
+URL_LLM_ROOT="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main"
+LLM_FILES=(
+    "qwen2.5-7b-instruct-q5_k_m-00001-of-00002.gguf"
+    "qwen2.5-7b-instruct-q5_k_m-00002-of-00002.gguf"
+)
 
 WAKE_URL="https://github.com/dscripka/openWakeWord/releases/download/v0.1.0/embedding_model.tflite"
 
@@ -129,7 +138,9 @@ fetch_reranker() {
 
 fetch_llm() {
     local dir="${MODELS_DIR}/llm"
-    download "${URL_LLM}" "${dir}/qwen2.5-7b-instruct-q5_k_m.gguf"
+    for f in "${LLM_FILES[@]}"; do
+        download "${URL_LLM_ROOT}/${f}" "${dir}/${f}"
+    done
 }
 
 main() {

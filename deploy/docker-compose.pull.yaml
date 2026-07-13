@@ -134,7 +134,8 @@ services:
     profiles: ["rag"]
     command:
       - "-m"
-      - "/models/llm/${HR_LLM_GGUF:-qwen2.5-7b-instruct-q5_k_m.gguf}"
+      # Split GGUF — point at shard 1; llama.cpp loads the rest.
+      - "/models/llm/${HR_LLM_GGUF:-qwen2.5-7b-instruct-q5_k_m-00001-of-00002.gguf}"
       - "--host"
       - "0.0.0.0"      # pragma: allowlist secret
       - "--port"

@@ -29,38 +29,37 @@ session:
 #   tts_adapters:       piper
 #   wakeword_adapters:  openwakeword
 stack:
-  # Production on G1: replace `alsa` with `unitree_g1` and drop the `device`
-  # setting; the G1 mic feeds a 6-channel multicast stream that the adapter
-  # downmixes internally.
+  # G1 mic: 6-channel far-field multicast stream, downmixed to mono
+  # internally. Needs host networking to receive the multicast (see
+  # docker-compose.unitree.yaml). For a dev laptop use `alsa` or `null`.
   audio_in:
-    name: alsa
-    config:
-      device: plughw:2,0
-      sample_rate_hz: 16000
-      channels: 1
-      frame_ms: 50
-  # Production on G1: `unitree_g1` uses the vendor SDK AudioClient — it will
-  # init DDS on `network_interface` on first use. Use `null` in CI or on a
-  # dev laptop where nothing should actually make a sound.
-  audio_out:
-    name: null
+    name: unitree_g1
     config: {}
-    # name: unitree_g1
-    # config:
-    #   network_interface: eth10
-    #   volume_pct: 100
+  # G1 speaker via the vendor SDK AudioClient; inits DDS on eth10 on first
+  # use. Use `null` in CI / on a laptop where nothing should make a sound.
+  audio_out:
+    name: unitree_g1
+    config:
+      network_interface: eth10
+      volume_pct: 100
   vad:
     name: silero_v5
     config: {}
+  # Point ASR at the LOCAL fetched model dir — the HF hub id
+  # "large-v3-turbo" resolves to a now-gated repo. CPU on the base image
+  # (no CUDA userspace); int8 keeps it fast enough for short utterances.
   asr:
     name: faster_whisper
-    config: {}
+    config:
+      model_id: /var/lib/humanoid-robot/models/faster-whisper-large-v3-turbo
+      device: cpu
+      compute_type: int8
   tts:
     name: piper
     config:
       voice_paths:
-        ru: /opt/piper/voices/ru_RU-ruslan-medium.onnx
-        en: /opt/piper/voices/en_US-lessac-medium.onnx
+        ru: /var/lib/humanoid-robot/models/piper/ru_RU-irina-medium.onnx
+        en: /var/lib/humanoid-robot/models/piper/en_US-lessac-medium.onnx
   # wake_word:
   #   name: openwakeword
   #   config:
