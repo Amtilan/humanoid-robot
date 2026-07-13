@@ -11,6 +11,7 @@ Off-robot the SDK is unimportable; everything happens through
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -74,7 +75,9 @@ class UnitreeG1Head:
                 error_message=str(exc)[:200],
             )
         try:
-            code = _call_set_pose(client, pitch=cmd.pitch_rad, yaw=cmd.yaw_rad)
+            code = await asyncio.to_thread(
+                _call_set_pose, client, pitch=cmd.pitch_rad, yaw=cmd.yaw_rad
+            )
         except Exception as exc:
             _LOG.exception("unitree_g1.head.set_pose_failed")
             return RobotCommandResult(

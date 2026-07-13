@@ -12,6 +12,7 @@ Off-robot the SDK is unimportable; the client is resolved lazily via
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -116,7 +117,9 @@ class UnitreeG1Posture:
                 error_message=f"LocoClient has none of: {names}",
             )
         try:
-            code = getattr(client, method)(*args)
+            # LocoClient transitions block until the motion settles; run off
+            # the event loop so the adapter stays responsive.
+            code = await asyncio.to_thread(getattr(client, method), *args)
         except Exception as exc:
             _LOG.exception("unitree_g1.posture.%s_failed", method)
             return RobotCommandResult(

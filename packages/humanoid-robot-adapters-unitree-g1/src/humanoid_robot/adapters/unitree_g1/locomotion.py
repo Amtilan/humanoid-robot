@@ -12,6 +12,7 @@ call.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -81,7 +82,8 @@ class UnitreeG1LocomotionAdapter:
             )
         try:
             duration_s = max(cmd.duration_ms / 1000.0, 0.0)
-            code = _call_move(
+            code = await asyncio.to_thread(
+                _call_move,
                 client,
                 vx=cmd.linear_x_mps,
                 vy=cmd.linear_y_mps,
@@ -114,7 +116,7 @@ class UnitreeG1LocomotionAdapter:
                 error_message=str(exc)[:200],
             )
         try:
-            code = _call_stop(client)
+            code = await asyncio.to_thread(_call_stop, client)
         except Exception as exc:
             _LOG.exception("unitree_g1.locomotion.stop_failed")
             return RobotCommandResult(

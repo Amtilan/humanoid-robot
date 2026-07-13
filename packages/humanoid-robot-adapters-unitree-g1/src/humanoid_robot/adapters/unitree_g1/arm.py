@@ -12,6 +12,7 @@ Design:
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from dataclasses import dataclass, field
 from typing import Any
@@ -86,7 +87,10 @@ class UnitreeG1Arm:
                 ),
             )
         try:
-            rc = client.ExecuteAction(action_id)
+            # ExecuteAction blocks for the gesture's duration (seconds); run
+            # it off the event loop so telemetry + other commands keep
+            # flowing instead of stalling the whole adapter.
+            rc = await asyncio.to_thread(client.ExecuteAction, action_id)
         except Exception as exc:
             return RobotCommandResult(
                 outcome=MoveOutcome.HARDWARE_ERROR,
