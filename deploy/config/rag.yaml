@@ -7,6 +7,11 @@ environment: prod
 service_name: cortex-rag
 log_level: INFO
 
+# "conversation" = RAG-augmented chat (talks about anything, uses the KB
+# when relevant). "grounded" = strict document-only QA (rejects off-KB
+# questions). A talking robot wants conversation.
+mode: conversation
+
 nats:
   servers:
     - nats://127.0.0.1:4222
@@ -20,6 +25,13 @@ qa:
   max_answer_tokens: 768
   max_retries_on_citation_fail: 1
 
+conversation:
+  top_k_retrieve: 6
+  top_k_context: 3
+  min_context_score: 0.30
+  temperature: 0.7
+  max_tokens: 512
+
 # Which adapter to load per port. Names refer to entry_points registered by
 # the installed adapter distributions.
 #   llm_adapters:       llama_cpp
@@ -30,9 +42,12 @@ stack:
   llm:
     name: llama_cpp
     config:
-      base_url: http://127.0.0.1:8080
-      model: qwen3-8b-instruct-q4_k_m
-      request_timeout_s: 60.0
+      # The llama-cpp compose service (OpenAI-compatible server).
+      base_url: http://llama-cpp:8080
+      # Matches the GGUF fetch-models.sh downloads; llama.cpp serves
+      # whatever it loaded, so this is mostly a label.
+      model: qwen2.5-7b-instruct-q5_k_m
+      request_timeout_s: 120.0
   embedder:
     name: bge_m3
     config:

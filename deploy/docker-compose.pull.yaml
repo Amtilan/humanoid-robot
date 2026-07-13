@@ -124,6 +124,34 @@ services:
       core:
         condition: service_started
 
+  # Local LLM server (offline). Serves the fetched Qwen GGUF over an
+  # OpenAI-compatible HTTP API; cortex-rag reaches it as llama-cpp:8080.
+  # CPU build — slow but private; swap the image tag for :server-cuda +
+  # `runtime: nvidia` once a Jetson-CUDA build is validated.
+  llama-cpp:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    restart: unless-stopped
+    profiles: ["rag"]
+    command:
+      - "-m"
+      - "/models/llm/${HR_LLM_GGUF:-qwen2.5-7b-instruct-q5_k_m.gguf}"
+      - "--host"
+      - "0.0.0.0"      # pragma: allowlist secret
+      - "--port"
+      - "8080"
+      - "-c"
+      - "4096"
+      - "-t"
+      - "${HR_LLM_THREADS:-6}"
+    volumes:
+      - /var/lib/humanoid-robot/models:/models:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
   rag:
     <<: *python-base
     profiles: ["rag"]
@@ -140,6 +168,8 @@ services:
       - rag-state:/var/lib/humanoid-robot
     depends_on:
       nats:
+        condition: service_healthy
+      llama-cpp:
         condition: service_healthy
       qdrant:
         condition: service_started

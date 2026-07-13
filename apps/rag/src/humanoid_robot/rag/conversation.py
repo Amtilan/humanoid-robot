@@ -114,7 +114,10 @@ class ConversationOrchestrator:
                 return ()
             scores = await self.reranker.rerank(question, tuple(h.chunk.content for h in raw))
             ranked = sorted(
-                (h.model_copy(update={"rerank_score": s}) for h, s in zip(raw, scores, strict=False)),
+                (
+                    h.model_copy(update={"rerank_score": s})
+                    for h, s in zip(raw, scores, strict=False)
+                ),
                 key=lambda h: h.rerank_score or 0.0,
                 reverse=True,
             )
