@@ -10,12 +10,45 @@ import typer
 
 from humanoid_robot.observability import configure_logging, get_logger
 from humanoid_robot.rag.composition import RagComposition
+from humanoid_robot.rag.conversation import ConversationConfig, ConversationOrchestrator
 from humanoid_robot.rag.grounded_qa import (
     GroundedQAConfig,
     GroundedQAOrchestrator,
 )
-from humanoid_robot.rag.runner import RagRunner
+from humanoid_robot.rag.runner import QaOrchestrator, RagRunner
 from humanoid_robot.rag.settings import RagRunnerSettings, load_settings
+
+
+def _build_orchestrator(composition: RagComposition) -> QaOrchestrator:
+    """Pick the conversational or grounded orchestrator from settings.mode."""
+    s = composition.settings
+    if s.mode == "conversation":
+        return ConversationOrchestrator(
+            vector_store=composition.vector_store,
+            reranker=composition.reranker,
+            llm=composition.llm,
+            config=ConversationConfig(
+                top_k_retrieve=s.conversation.top_k_retrieve,
+                top_k_context=s.conversation.top_k_context,
+                min_context_score=s.conversation.min_context_score,
+                temperature=s.conversation.temperature,
+                max_tokens=s.conversation.max_tokens,
+            ),
+        )
+    return GroundedQAOrchestrator(
+        vector_store=composition.vector_store,
+        reranker=composition.reranker,
+        llm=composition.llm,
+        config=GroundedQAConfig(
+            top_k_retrieve=s.qa.top_k_retrieve,
+            top_k_after_rerank=s.qa.top_k_after_rerank,
+            min_top1_rerank_score=s.qa.min_top1_rerank_score,
+            min_chunk_coverage=s.qa.min_chunk_coverage,
+            max_answer_tokens=s.qa.max_answer_tokens,
+            max_retries_on_citation_fail=s.qa.max_retries_on_citation_fail,
+        ),
+    )
+
 
 cli = typer.Typer(add_completion=False, no_args_is_help=True)
 
@@ -52,19 +85,8 @@ def run(
 async def _serve(settings: RagRunnerSettings) -> None:
     log = get_logger("cortex-rag.runner")
     composition = await RagComposition.build(settings)
-    orch = GroundedQAOrchestrator(
-        vector_store=composition.vector_store,
-        reranker=composition.reranker,
-        llm=composition.llm,
-        config=GroundedQAConfig(
-            top_k_retrieve=composition.settings.qa.top_k_retrieve,
-            top_k_after_rerank=composition.settings.qa.top_k_after_rerank,
-            min_top1_rerank_score=composition.settings.qa.min_top1_rerank_score,
-            min_chunk_coverage=composition.settings.qa.min_chunk_coverage,
-            max_answer_tokens=composition.settings.qa.max_answer_tokens,
-            max_retries_on_citation_fail=composition.settings.qa.max_retries_on_citation_fail,
-        ),
-    )
+    orch = _build_orchestrator(composition)
+    log.info("cortex-rag.mode", mode=composition.settings.mode)
     runner = RagRunner(
         orchestrator=orch,
         bus=composition.bus,

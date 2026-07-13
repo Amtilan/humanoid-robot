@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from dataclasses import dataclass, field
+from typing import Protocol
 
 from humanoid_robot.domain.knowledge import Citation, GroundedAnswer
 from humanoid_robot.domain.shared import new_correlation_id
@@ -21,19 +22,23 @@ from humanoid_robot.events import AsrFinal, BaseEvent, LlmAnswer, LlmRejected
 from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.observability import get_logger
 from humanoid_robot.ports import EventBusPort, Subscription
-from humanoid_robot.rag.grounded_qa import (
-    GroundedQAOrchestrator,
-    GroundedQAResult,
-)
+from humanoid_robot.rag.grounded_qa import GroundedQAResult
 
 _LOG = get_logger("cortex-rag.runner")
+
+
+class QaOrchestrator(Protocol):
+    """Either the grounded or conversational orchestrator — both answer the
+    same way (`asr.final` text in, a `GroundedQAResult` out)."""
+
+    async def answer(self, question: str, language: Language) -> GroundedQAResult: ...
 
 
 @dataclass(slots=True)
 class RagRunner:
     """Long-running consumer of `asr.final` events."""
 
-    orchestrator: GroundedQAOrchestrator
+    orchestrator: QaOrchestrator
     bus: EventBusPort
     producer: str = "cortex-rag"
     _stop: asyncio.Event = field(default_factory=asyncio.Event)

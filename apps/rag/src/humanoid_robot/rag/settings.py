@@ -47,6 +47,16 @@ class QaSettings(BaseModel):
     max_retries_on_citation_fail: int = 1
 
 
+class ConversationSettings(BaseModel):
+    """Tuning for the conversational (RAG-augmented chat) path."""
+
+    top_k_retrieve: int = 6
+    top_k_context: int = 3
+    min_context_score: float = 0.30
+    temperature: float = 0.7
+    max_tokens: int = 512
+
+
 class RagRunnerSettings(BaseSettings):
     """Top-level RAG configuration."""
 
@@ -60,8 +70,13 @@ class RagRunnerSettings(BaseSettings):
     environment: str = "prod"
     service_name: str = "cortex-rag"
     log_level: str = "INFO"
+    # "conversation" = RAG-augmented chat (answers anything, uses docs when
+    # relevant); "grounded" = strict document-only QA that rejects off-KB
+    # questions.
+    mode: str = "conversation"
     nats: NatsSettings = NatsSettings()
     qa: QaSettings = QaSettings()
+    conversation: ConversationSettings = ConversationSettings()
     stack: RagStackSettings
 
     @classmethod

@@ -122,6 +122,7 @@ ignore = [
 # Russian docstrings and prompt templates trip Ruff's ambiguous-Unicode rule;
 # enum reuses PASS as an intentional taxonomy name (not a password).
 "apps/rag/src/humanoid_robot/rag/grounded_qa.py" = ["RUF001", "RUF002", "S105"]
+"apps/rag/src/humanoid_robot/rag/conversation.py" = ["RUF001", "RUF002"]
 "packages/humanoid-robot-adapters-wakeword-openwakeword/src/humanoid_robot/adapters/wakeword_openwakeword/adapter.py" = ["ANN401"]
 "apps/voice/src/humanoid_robot/voice/__main__.py" = ["B008"]
 "apps/voice/src/humanoid_robot/voice/composition.py" = ["ANN401"]
