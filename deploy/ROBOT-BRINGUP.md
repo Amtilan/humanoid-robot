@@ -7,6 +7,38 @@ section is actionable, ordered by impact.
 
 ---
 
+## Consolidated status (2026-07-13) — VALIDATED ON THE REAL G1
+
+The platform runs the physical robot through its own safety stack. Proven
+end-to-end on the device:
+
+- **Deploy without git-clone**: signed GHCR images pulled + fail-closed
+  cosign-verified by `install-on-robot.sh` (installer self-bootstraps the
+  compose plugin, cosign, and a reversible egress fix for the eth10 DDS
+  route). Static LAN endpoint at `http://192.168.0.61:8081`.
+- **Real Unitree adapter** on the vendor SDK, DDS on `eth10`. Full live
+  telemetry through NATS → core → API: IMU (accel_z≈9.8 = gravity),
+  motor/board temps, battery (`rt/lf/bmsstate`).
+- **Command + safety pipeline** end-to-end: `POST /robot/commands` →
+  gate (estop / capability allowlist / payload schema / rate-limit /
+  audit) → adapter → vendor SDK. Verified via the audit trail.
+- **Real actuation through the platform**: `arms.gesture` (release arm /
+  face wave → ACCEPTED, arm moves) and `locomotion.posture {damp}`
+  (ACCEPTED) — both gated. The robot stands/balances (operational FSM);
+  gated `balance_stand`/postures are wired.
+
+Open follow-ups (not blockers): deploy the `asyncio.to_thread` fix
+(bfa8280) so a slow gesture can't stall the adapter; add release-to-neutral
+between chained gestures; wire stand-up as a fully tested gated sequence
+(the native controller is the tested path for the first stand).
+
+Safety reality learned on hardware: the **hardware** e-stop cuts torque =
+collapse; the **software** gate only blocks future commands (robot keeps
+its mode). Bring a standing robot down deliberately (release → posture
+sit → posture damp → engage) or via the native controller.
+
+---
+
 ## 0. The robot as-found (recon facts)
 
 | Area | Reality on the device |
