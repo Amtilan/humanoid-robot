@@ -234,10 +234,20 @@ ad-hoc direct LocoClient calls. Deployed to the robot (core + adapter).
 arms.gesture (which forwarded but returned hardware_error), Damp actually
 executed. Damp is a soft hold — no stand, no fall. Gate re-engaged after.
 
-Held at the checkpoint before the actual stand: `stand_up → balance_stand`
-physically raises the robot (e-stop = torque cut = collapse), so it needs
-the robot free-standing + an explicit go. But it now runs through the
-gate (estop / schema / rate-limit / audit), not a hack.
+**Full stand achieved (2026-07-10).** From the upright damped hold,
+`locomotion.posture {balance_stand}` through the gate returned
+`outcome=ACCEPTED` — the robot engaged active balance and stood under its
+own power, commanded entirely through the safety platform (estop / schema
+/ rate-limit / audit). The G1 is now OPERATIONAL, so `arms.gesture` etc.
+work (the earlier 7404 was the non-operational FSM).
+
+Safety notes learned here:
+- The **hardware** e-stop cuts torque = collapse (emergency only).
+- The **software** gate (`estop/engage`) only blocks future commands —
+  nothing in the adapter reacts to it, so the robot keeps its current
+  mode. Re-engaging after balance_stand is safe (robot keeps balancing).
+- Bring it down safely: release gate → `posture sit` → `posture damp` →
+  engage gate (or use the native controller).
 
 ### Phase B — real Unitree adapter (the motion blocker)
 1. Package `unitree_sdk2py` + `cyclonedds` into an **arm64 adapter image
