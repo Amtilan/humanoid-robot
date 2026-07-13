@@ -30,19 +30,29 @@ from humanoid_robot.domain.robot import (
 
 _LOG = logging.getLogger(__name__)
 
-# PostureKind -> LocoClient method name. Names verified against the
-# installed unitree_sdk2py LocoClient (dir()): Damp, ZeroTorque, Sit,
-# Squat, StandUp, BalanceStand, HighStand, LowStand, StopMove.
-_METHOD_BY_POSTURE: dict[PostureKind, str] = {
-    PostureKind.DAMP: "Damp",
-    PostureKind.ZERO_TORQUE: "ZeroTorque",
-    PostureKind.SIT: "Sit",
-    PostureKind.SQUAT: "Squat",
-    PostureKind.STAND_UP: "StandUp",
-    PostureKind.BALANCE_STAND: "BalanceStand",
-    PostureKind.HIGH_STAND: "HighStand",
-    PostureKind.LOW_STAND: "LowStand",
-    PostureKind.STOP_MOVE: "StopMove",
+# balance_mode passed to LocoClient.BalanceStand / SetBalanceMode. 0 is the
+# static stand-balance mode (vs a continuous-gait mode); safe default.
+_BALANCE_MODE_STATIC = 0
+
+# PostureKind -> ordered candidate (method_name, args) tuples. We probe in
+# order and use the first method the installed SDK actually exposes,
+# because the Python and C++ SDKs disagree on names: the Python
+# unitree_sdk2py LocoClient has `Squat2StandUp` / `StandUp2Squat` /
+# `Lie2StandUp` (no bare `StandUp` / `Squat`), and `BalanceStand` REQUIRES
+# a balance_mode argument. dir() on the installed client confirmed:
+# Damp, ZeroTorque, Sit, Squat2StandUp, StandUp2Squat, Lie2StandUp,
+# BalanceStand, HighStand, LowStand, StopMove.
+_Call = tuple[str, tuple[object, ...]]
+_CANDIDATES_BY_POSTURE: dict[PostureKind, tuple[_Call, ...]] = {
+    PostureKind.DAMP: (("Damp", ()),),
+    PostureKind.ZERO_TORQUE: (("ZeroTorque", ()),),
+    PostureKind.SIT: (("Sit", ()),),
+    PostureKind.SQUAT: (("Squat", ()), ("StandUp2Squat", ())),
+    PostureKind.STAND_UP: (("StandUp", ()), ("Squat2StandUp", ()), ("Lie2StandUp", ())),
+    PostureKind.BALANCE_STAND: (("BalanceStand", (_BALANCE_MODE_STATIC,)),),
+    PostureKind.HIGH_STAND: (("HighStand", ()),),
+    PostureKind.LOW_STAND: (("LowStand", ()),),
+    PostureKind.STOP_MOVE: (("StopMove", ()),),
 }
 
 
@@ -82,12 +92,12 @@ class UnitreeG1Posture:
         return instance
 
     async def set_posture(self, cmd: PostureCommand) -> RobotCommandResult:
-        method = _METHOD_BY_POSTURE.get(cmd.posture)
-        if method is None:  # pragma: no cover - enum keeps this exhaustive
+        candidates = _CANDIDATES_BY_POSTURE.get(cmd.posture)
+        if not candidates:  # pragma: no cover - enum keeps this exhaustive
             return RobotCommandResult(
                 outcome=MoveOutcome.REJECTED_BY_POLICY,
                 error_code="unknown_posture",
-                error_message=f"no LocoClient method for posture {cmd.posture!r}",
+                error_message=f"no LocoClient mapping for posture {cmd.posture!r}",
             )
         try:
             client = self._ensure_client()
@@ -97,15 +107,16 @@ class UnitreeG1Posture:
                 error_code="sdk_unavailable",
                 error_message=str(exc)[:200],
             )
-        fn = getattr(client, method, None)
-        if not callable(fn):
+        method, args = _first_available(client, candidates)
+        if method is None:
+            names = ", ".join(name for name, _ in candidates)
             return RobotCommandResult(
                 outcome=MoveOutcome.HARDWARE_ERROR,
                 error_code="method_missing",
-                error_message=f"LocoClient has no {method}()",
+                error_message=f"LocoClient has none of: {names}",
             )
         try:
-            code = fn()
+            code = getattr(client, method)(*args)
         except Exception as exc:
             _LOG.exception("unitree_g1.posture.%s_failed", method)
             return RobotCommandResult(
@@ -120,6 +131,17 @@ class UnitreeG1Posture:
             error_code="loco_client_error",
             error_message=f"{method}() returned {code!r}",
         )
+
+
+def _first_available(
+    client: Any,  # noqa: ANN401
+    candidates: tuple[_Call, ...],
+) -> tuple[str | None, tuple[object, ...]]:
+    """First (name, args) whose method the client actually exposes."""
+    for name, args in candidates:
+        if callable(getattr(client, name, None)):
+            return name, args
+    return None, ()
 
 
 def _try_call(client: Any, name: str, *args: object) -> None:  # noqa: ANN401

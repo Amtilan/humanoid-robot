@@ -12,6 +12,7 @@ from humanoid_robot.domain.robot import MoveOutcome, PostureCommand, PostureKind
 @dataclass(slots=True)
 class _FakeLocoClient:
     calls: list[str] = field(default_factory=list)
+    balance_mode: int | None = None
     ret: object = None
     raises: BaseException | None = None
 
@@ -30,7 +31,8 @@ class _FakeLocoClient:
     def Damp(self) -> object:  # noqa: N802
         return self._record("Damp")
 
-    def BalanceStand(self) -> object:  # noqa: N802
+    def BalanceStand(self, balance_mode: int) -> object:  # noqa: N802
+        self.balance_mode = balance_mode
         return self._record("BalanceStand")
 
     def StandUp(self) -> object:  # noqa: N802
@@ -48,12 +50,14 @@ class TestPosture:
         assert result.outcome == MoveOutcome.ACCEPTED
         assert client.calls == ["Damp"]
 
-    async def test_balance_stand_maps_to_balance_stand(self) -> None:
+    async def test_balance_stand_passes_balance_mode(self) -> None:
         client = _FakeLocoClient()
         posture = UnitreeG1Posture(client=client)
         result = await posture.set_posture(PostureCommand(posture=PostureKind.BALANCE_STAND))
         assert result.outcome == MoveOutcome.ACCEPTED
         assert client.calls == ["BalanceStand"]
+        # The SDK's BalanceStand REQUIRES a balance_mode arg — 0 (static).
+        assert client.balance_mode == 0
 
     async def test_none_return_is_accepted(self) -> None:
         # LocoClient returns None on success on the real SDK build.
@@ -98,6 +102,8 @@ class TestAdapterIntegration:
         client = _FakeLocoClient()
         adapter = UnitreeG1Adapter()
         adapter.attach_posture_client(client)
-        result = await adapter.posture.set_posture(PostureCommand(posture=PostureKind.BALANCE_STAND))
+        result = await adapter.posture.set_posture(
+            PostureCommand(posture=PostureKind.BALANCE_STAND)
+        )
         assert result.outcome == MoveOutcome.ACCEPTED
         assert client.calls == ["BalanceStand"]
