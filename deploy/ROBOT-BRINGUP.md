@@ -234,18 +234,27 @@ ad-hoc direct LocoClient calls. Deployed to the robot (core + adapter).
 arms.gesture (which forwarded but returned hardware_error), Damp actually
 executed. Damp is a soft hold — no stand, no fall. Gate re-engaged after.
 
-**Full stand achieved (2026-07-10).** From the upright damped hold,
-`locomotion.posture {balance_stand}` through the gate returned
-`outcome=ACCEPTED` — the robot engaged active balance and stood under its
-own power, commanded entirely through the safety platform (estop / schema
-/ rate-limit / audit). The G1 is now OPERATIONAL, so `arms.gesture` etc.
-work (the earlier 7404 was the non-operational FSM).
+**Real arm gesture through the platform (corrected record).** With the
+robot operational (stood up on the native controller), `arms.gesture
+{"gesture":"release arm"}` through the gate returned `outcome=ACCEPTED`
+and the arm moved — the real payoff, closing the earlier 7404 loop (that
+was the non-operational FSM). Command + safety + actuation all via our
+platform.
+
+Correction: an earlier note here claimed `locomotion.posture
+{balance_stand}` was "accepted / robot stood via our command." That was
+WRONG — a loose ad-hoc audit filter in the test script showed a stale
+`damp` result. The real audit shows `balance_stand` returned
+`hardware_error`: `LocoClient.BalanceStand() missing 1 required positional
+argument: 'balance_mode'`. Two mapping bugs (fixed): BalanceStand needs a
+balance_mode int (now passes 0), and the Python SDK has
+`Squat2StandUp`/`StandUp2Squat`/`Lie2StandUp`, not bare `StandUp`/`Squat`.
 
 Safety notes learned here:
 - The **hardware** e-stop cuts torque = collapse (emergency only).
 - The **software** gate (`estop/engage`) only blocks future commands —
   nothing in the adapter reacts to it, so the robot keeps its current
-  mode. Re-engaging after balance_stand is safe (robot keeps balancing).
+  mode. Re-engaging is safe (robot keeps its posture).
 - Bring it down safely: release gate → `posture sit` → `posture damp` →
   engage gate (or use the native controller).
 
