@@ -1,10 +1,11 @@
-import { NavLink, Route, Routes } from "react-router-dom";
+import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import {
   Activity,
   BookOpen,
   Bot,
   Boxes,
   Gauge,
+  Home,
   LayoutDashboard,
   Mic,
   Puzzle,
@@ -18,6 +19,7 @@ import { AdaptersPage } from "./pages/AdaptersPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DiagnosticsPage } from "./pages/DiagnosticsPage";
 import { EventsPage } from "./pages/EventsPage";
+import { HomePage } from "./pages/HomePage";
 import { KnowledgePage } from "./pages/KnowledgePage";
 import { PluginsPage } from "./pages/PluginsPage";
 import { QaPage } from "./pages/QaPage";
@@ -29,7 +31,8 @@ import { MicActivity } from "./lib/micActivity";
 import { cn } from "./lib/cn";
 
 const navItems = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/", label: "Home", icon: Home },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/safety", label: "Safety", icon: ShieldAlert },
   { to: "/robot", label: "Robot", icon: Bot },
   { to: "/voice", label: "Voice", icon: Mic },
@@ -43,6 +46,12 @@ const navItems = [
 ];
 
 export function App() {
+  // The home route is a full-bleed, app-like experience (robot's eyes + chat)
+  // with no console chrome; every other route uses the sidebar shell.
+  const location = useLocation();
+  if (location.pathname === "/") {
+    return <HomePage />;
+  }
   return (
     <div className="flex h-full">
       <aside className="flex w-64 flex-col border-r border-border bg-background/50 p-4">
@@ -74,7 +83,7 @@ export function App() {
       </aside>
       <main className="flex-1 overflow-auto p-8">
         <Routes>
-          <Route path="/" element={<DashboardPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/safety" element={<SafetyPage />} />
           <Route path="/robot" element={<RobotPage />} />
           <Route path="/voice" element={<VoiceSessionsPage />} />

@@ -60,12 +60,14 @@ EMBED_FILES=(
 )
 
 URL_RERANK_ROOT="https://huggingface.co/BAAI/bge-reranker-v2-m3/resolve/main"
+# NB: this repo ships weights as model.safetensors (there is no
+# pytorch_model.bin — requesting it 404s).
 RERANK_FILES=(
     "config.json"
     "sentencepiece.bpe.model"
     "tokenizer.json"
     "tokenizer_config.json"
-    "pytorch_model.bin"
+    "model.safetensors"
 )
 
 # The official Qwen GGUF is split into 2 shards; llama.cpp loads the whole

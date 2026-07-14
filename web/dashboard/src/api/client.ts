@@ -50,6 +50,22 @@ function authHeader(): Record<string, string> {
   return token ? { authorization: `Bearer ${token}` } : {};
 }
 
+// Camera endpoints are consumed by <img>/<video> tags, which can't set an
+// Authorization header — so the token rides as ?token= (core accepts either).
+// These return URL strings rather than promises for that reason.
+function withToken(path: string): string {
+  const token = getAuthToken();
+  return token ? `${path}?token=${encodeURIComponent(token)}` : path;
+}
+
+export function robotCameraStreamUrl(cameraId = "front"): string {
+  return withToken(`/api/v1/robot/camera/${encodeURIComponent(cameraId)}/stream`);
+}
+
+export function robotCameraSnapshotUrl(cameraId = "front"): string {
+  return withToken(`/api/v1/robot/camera/${encodeURIComponent(cameraId)}/snapshot`);
+}
+
 async function guard<T>(response: Response, url: string, fallback: () => Promise<T>): Promise<T> {
   if (response.status === 401) {
     fireUnauthorized();

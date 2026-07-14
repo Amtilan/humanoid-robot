@@ -45,6 +45,35 @@ services:
       core:
         condition: service_healthy
 
+  # G1 front-camera MJPEG bridge — "the robot's eyes". The cameras are wired to
+  # the robot's main computer, not this Jetson (no local /dev/video), so frames
+  # come from the vendor VideoClient over DDS. Runs the adapter image (has
+  # unitree_sdk2py + DDS) on host net so VideoClient reaches the G1 video
+  # service on eth10, and serves multipart/x-mixed-replace on :8091. The
+  # dashboard nginx proxies /api/v1/robot/camera/ -> host.docker.internal:8091.
+  camera:
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_OWNER:-amtilan}/humanoid-robot-adapter-unitree:${IMAGE_TAG:-main}
+    network_mode: host
+    restart: unless-stopped
+    entrypoint: ["python", "-m", "humanoid_robot.adapters.unitree_g1.camera_mjpeg"]
+    command:
+      - "--interface"
+      - "${HR_UNITREE_IFACE:-eth10}"
+      - "--port"
+      - "${HR_CAMERA_PORT:-8091}"
+    environment:
+      # If a token is set, the bridge requires ?token= too (nginx bypasses
+      # core's gate, so the bridge enforces it itself).
+      HR_AUTH__TOKEN: "${HR_AUTH__TOKEN:-}"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/healthz')\" || exit 1"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
   # Voice needs the vendor SDK (G1 speaker AudioClient) AND host networking
   # (the G1 mic is a UDP multicast on 239.168.123.161 over eth10, and the
   # speaker inits DDS on eth10). So it runs the adapter image on host net,

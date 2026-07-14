@@ -46,3 +46,34 @@ services:
     environment:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
+
+  # Swap the CPU llama.cpp for the Tegra-CUDA build (see
+  # deploy/docker/llamacpp-cuda.Dockerfile). Built natively on the Jetson;
+  # in production point HR_LLAMACPP_CUDA_IMAGE at the GHCR ref so the robot
+  # pulls instead of building. `-ngl 99` offloads every transformer layer
+  # to the iGPU — the whole reason for this overlay (~15-25 tok/s vs 2-5 on
+  # CPU). The command is restated in full because compose replaces (not
+  # merges) list-valued keys.
+  llama-cpp:
+    image: ${HR_LLAMACPP_CUDA_IMAGE:-humanoid-robot-llamacpp-cuda:r35.3.1}
+    # Built ON the Jetson (arm64 Tegra CUDA), not in the registry — never let
+    # `docker compose pull` try to fetch it.
+    pull_policy: never
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    command:
+      - "-m"
+      - "/models/llm/${HR_LLM_GGUF:-qwen2.5-7b-instruct-q5_k_m-00001-of-00002.gguf}"
+      - "--host"
+      - "0.0.0.0"      # pragma: allowlist secret
+      - "--port"
+      - "8080"
+      - "-c"
+      - "4096"
+      - "-ngl"
+      - "${HR_LLM_NGL:-99}"
+    healthcheck:
+      # GPU init + 7B load is slower than the CPU image's 20 s window.
+      start_period: 120s

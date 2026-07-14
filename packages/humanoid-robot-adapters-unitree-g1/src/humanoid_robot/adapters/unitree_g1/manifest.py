@@ -6,6 +6,7 @@ from humanoid_robot.domain.robot import (
     ArmCapability,
     AudioCapability,
     BatteryCapability,
+    CameraCapability,
     HandCapability,
     HeadCapability,
     LocomotionCapability,
@@ -68,7 +69,10 @@ def build_manifest(
             ),
             audio_out=AudioCapability(kind=speaker_kind, channels=1, sample_rate_hz=16_000),
             battery=BatteryCapability(reports_percentage=True),
-            cameras=(),
+            # Front camera comes from the vendor VideoClient over DDS (there is
+            # no local sensor on this Jetson); frames are served as MJPEG by
+            # camera_mjpeg.py. Resolution/fps observed live: 1280x720 JPEG.
+            cameras=(CameraCapability(camera_id="front", resolution_wh=(1280, 720), fps=12),),
         ),
         transport_hint="cyclonedds",
         network_interface=network_interface,

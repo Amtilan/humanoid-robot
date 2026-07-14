@@ -82,6 +82,11 @@ services:
     restart: unless-stopped
     depends_on:
       - core
+    # Lets nginx reach the adapter's host-net camera bridge (:8091) at
+    # host.docker.internal. host-gateway resolves on all Docker >= 20.10, so
+    # nginx starts cleanly even off-robot (the camera route just 502s there).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       # nginx here proxies /api + the WebSocket event stream to core, so
       # this one port is the single entrypoint to everything. Loopback by
