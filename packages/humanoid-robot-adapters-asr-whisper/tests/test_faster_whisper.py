@@ -99,3 +99,13 @@ class TestFasterWhisperAsrStreaming:
         with pytest.raises(ValueError, match="sample_rate_hz"):
             async for _ in asr.transcribe_stream(gen()):
                 pass
+
+
+def test_flat_kwargs_config_builds_model() -> None:
+    """The voice composition resolves adapters as factory(**selection.config),
+    so a flat YAML config block must construct FasterWhisperConfig."""
+    asr = FasterWhisperAsr(model_id="/models/whisper", device="cpu", compute_type="int8")
+    assert isinstance(asr.config, FasterWhisperConfig)
+    assert asr.config.model_id == "/models/whisper"
+    assert asr.config.device == "cpu"
+    assert asr.config.compute_type == "int8"

@@ -65,7 +65,13 @@ class FasterWhisperAsr:
         config: FasterWhisperConfig | None = None,
         *,
         loader: Any = None,
+        **kwargs: Any,
     ) -> None:
+        # The voice composition resolves adapters as ``factory(**selection.config)``,
+        # so a YAML `config:` block arrives as flat keyword args — build the
+        # config model from them. An explicit `config=` (tests) still wins.
+        if config is None and kwargs:
+            config = FasterWhisperConfig(**kwargs)
         self.config = config or FasterWhisperConfig()
         self._loader = loader
         self._model = None

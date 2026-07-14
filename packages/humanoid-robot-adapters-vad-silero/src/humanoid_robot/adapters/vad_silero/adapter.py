@@ -60,7 +60,12 @@ class SileroVad:
         config: SileroConfig | None = None,
         *,
         predictor: Callable[[list[float]], float] | None = None,
+        **kwargs: Any,
     ) -> None:
+        # Voice composition resolves adapters as ``factory(**selection.config)``,
+        # so a YAML `config:` block arrives as flat keyword args.
+        if config is None and kwargs:
+            config = SileroConfig(**kwargs)
         self.config = config or SileroConfig()
         self._predictor = predictor
         self._buffer = bytearray()

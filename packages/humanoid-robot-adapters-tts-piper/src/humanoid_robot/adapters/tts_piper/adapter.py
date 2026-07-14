@@ -66,7 +66,13 @@ class PiperTts:
         config: PiperConfig | None = None,
         *,
         loader: Any = None,
+        **kwargs: Any,
     ) -> None:
+        # Voice composition resolves adapters as ``factory(**selection.config)``,
+        # so a YAML `config:` block arrives as flat keyword args — build the
+        # config model from them. An explicit `config=` (tests) still wins.
+        if config is None and kwargs:
+            config = PiperConfig(**kwargs)
         self.config = config or PiperConfig()
         self._loader = loader
         self._voices = {}
