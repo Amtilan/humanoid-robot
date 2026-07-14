@@ -170,4 +170,9 @@ def _voice_format(voice: Any) -> AudioFormat:
 
 
 def _chunk_bytes(fmt: AudioFormat, chunk_ms: int) -> int:
-    return fmt.bytes_per_second * chunk_ms // 1000
+    # Align to a whole audio frame (e.g. 2 bytes for mono PCM16) — an odd-sized
+    # chunk breaks downstream 16-bit consumers like audioop.ratecv ("not a
+    # whole number of frames"). At 22050 Hz mono, 50 ms would be 2205 (odd).
+    frame = fmt.sample_width_bytes * fmt.channels
+    raw = fmt.bytes_per_second * chunk_ms // 1000
+    return max(frame, raw - raw % frame)

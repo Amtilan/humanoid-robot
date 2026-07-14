@@ -75,18 +75,20 @@ class TestPiperTts:
         assert frame.format.sample_rate_hz == 22_050
 
     async def test_stream_slices_into_chunks(self) -> None:
-        # 22.05 kHz * 1ch * 2B = 44_100 B/s; 50 ms = 2205 B chunk.
+        # 22.05 kHz * 1ch * 2B = 44_100 B/s; 50 ms = 2205 B, aligned down to a
+        # whole 2-byte frame -> 2204.
         piece = b"\x00" * 2200
         tts = PiperTts(
             PiperConfig(voice_paths={"ru": "/x.onnx"}, stream_chunk_ms=50),
             loader=_mk_loader([piece, piece]),
         )
         frames = [f async for f in tts.synthesize_stream(_req())]
-        # Total 4400 B → one 2205 B + one 2195 B tail.
+        # Total 4400 B → one 2204 B chunk + one 2196 B tail (both even).
         assert sum(len(f.pcm) for f in frames) == 4400
         assert len(frames) == 2
-        assert len(frames[0].pcm) == 2205
-        assert len(frames[1].pcm) == 4400 - 2205
+        assert len(frames[0].pcm) == 2204
+        assert all(len(f.pcm) % 2 == 0 for f in frames)  # whole frames
+        assert len(frames[1].pcm) == 4400 - 2204
 
     async def test_voice_cached_after_first_call(self) -> None:
         calls: list[str] = []
