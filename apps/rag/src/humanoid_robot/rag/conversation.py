@@ -47,6 +47,10 @@ class ConversationConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    # Skip retrieval entirely (pure chat) when there is no knowledge base yet —
+    # the embedder/reranker are CPU-bound here and add seconds per turn while
+    # always degrading to chat anyway. Flip to true once documents are ingested.
+    retrieve: bool = Field(default=True)
     top_k_retrieve: int = Field(default=6, ge=1, le=50)
     top_k_context: int = Field(default=3, ge=0, le=10)
     min_context_score: float = Field(default=0.30, ge=0.0, le=1.0)
@@ -106,6 +110,8 @@ class ConversationOrchestrator:
 
     async def _retrieve(self, question: str) -> tuple[RetrievalHit, ...]:
         """Best-effort retrieval — never blocks a chat reply."""
+        if not self.config.retrieve:
+            return ()
         try:
             raw = await self.vector_store.search(
                 RetrievalQuery(text=question, top_k=self.config.top_k_retrieve)

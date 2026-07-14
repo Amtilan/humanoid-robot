@@ -117,3 +117,21 @@ class TestConversation:
         await orch.answer("hello", Language.EN)
         assert llm.last_request is not None
         assert "English" in llm.last_request.system_prompt
+
+
+class _TrackingStore:
+    def __init__(self) -> None:
+        self.searched = False
+
+    async def search(self, query: RetrievalQuery) -> tuple[RetrievalHit, ...]:
+        self.searched = True
+        return ()
+
+
+async def test_retrieve_false_skips_vector_store() -> None:
+    """retrieve=false must not touch the (CPU-bound) embedder/vector store."""
+    store = _TrackingStore()
+    orch = _orch(store=store, config=ConversationConfig(retrieve=False))
+    result = await orch.answer("привет", Language.RU)
+    assert store.searched is False
+    assert result.answer.answer  # still produced a chat reply

@@ -28,6 +28,7 @@ def _build_orchestrator(composition: RagComposition) -> QaOrchestrator:
             reranker=composition.reranker,
             llm=composition.llm,
             config=ConversationConfig(
+                retrieve=s.conversation.retrieve,
                 top_k_retrieve=s.conversation.top_k_retrieve,
                 top_k_context=s.conversation.top_k_context,
                 min_context_score=s.conversation.min_context_score,

@@ -26,6 +26,10 @@ qa:
   max_retries_on_citation_fail: 1
 
 conversation:
+  # No documents are ingested yet, so retrieval only adds CPU-bound embedder
+  # latency per turn while always degrading to chat. Keep it off for a snappy
+  # spoken chat; set true after ingesting a knowledge base.
+  retrieve: false
   top_k_retrieve: 6
   top_k_context: 3
   min_context_score: 0.30

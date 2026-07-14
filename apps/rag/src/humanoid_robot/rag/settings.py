@@ -50,6 +50,7 @@ class QaSettings(BaseModel):
 class ConversationSettings(BaseModel):
     """Tuning for the conversational (RAG-augmented chat) path."""
 
+    retrieve: bool = True
     top_k_retrieve: int = 6
     top_k_context: int = 3
     min_context_score: float = 0.30
