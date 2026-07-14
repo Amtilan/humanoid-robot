@@ -47,6 +47,7 @@ class SessionSettings(BaseModel):
     max_utterance_ms: int = 10_000
     require_wake_word: bool = False
     wake_word_grace_ms: int = 1_500
+    wake_name: str | None = None
 
 
 class VoiceRunnerSettings(BaseSettings):

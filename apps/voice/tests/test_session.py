@@ -198,3 +198,44 @@ class TestVoiceSessionWakeWord:
         assert session.state == VoiceSessionState.IDLE
         # silence WakeWordTriggered event object exists
         assert any(isinstance(ev, WakeWordTriggered) for ev in bus.published)
+
+
+class TestNameGate:
+    async def test_utterance_with_name_is_forwarded_and_stripped(self) -> None:
+        script = [True] * 20 + [False] * 8
+        vad = _FakeVad(scripted=script)
+        asr = _FakeAsr(scripted_text="Слуга, включи свет")
+        bus = InMemoryEventBus()
+        session = VoiceSession(
+            vad=vad,
+            asr=asr,
+            bus=bus,
+            config=VoiceSessionConfig(
+                language_hint=Language.RU,
+                min_speech_ms=100,
+                silence_hang_ms=500,
+                wake_name="Слуга",
+            ),
+        )
+        await session.run(_feed([_frame(1600) for _ in range(len(script))]))
+        final = next(ev for ev in bus.published if isinstance(ev, AsrFinal))
+        assert final.text == "включи свет"  # leading "Слуга," stripped
+
+    async def test_utterance_without_name_is_dropped(self) -> None:
+        script = [True] * 20 + [False] * 8
+        vad = _FakeVad(scripted=script)
+        asr = _FakeAsr(scripted_text="привет как дела")
+        bus = InMemoryEventBus()
+        session = VoiceSession(
+            vad=vad,
+            asr=asr,
+            bus=bus,
+            config=VoiceSessionConfig(
+                language_hint=Language.RU,
+                min_speech_ms=100,
+                silence_hang_ms=500,
+                wake_name="Слуга",
+            ),
+        )
+        await session.run(_feed([_frame(1600) for _ in range(len(script))]))
+        assert not any(isinstance(ev, AsrFinal) for ev in bus.published)

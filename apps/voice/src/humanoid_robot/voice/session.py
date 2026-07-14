@@ -15,6 +15,7 @@ Design principles:
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -67,6 +68,11 @@ class VoiceSessionConfig(BaseModel):
     # Grace period after wake-word during which we accept speech even before
     # VAD has picked it up (helps with quiet openers).
     wake_word_grace_ms: int = Field(default=1500, ge=0, le=10_000)
+    # Transcript-level name gate: when set, an utterance is only forwarded to
+    # the LLM if its transcript mentions this name (case-insensitive; matched on
+    # the first 4 chars so Russian declensions "Слуга/Слугу/Слуге" all trigger).
+    # Reuses the always-on ASR — no separate wake-word model needed.
+    wake_name: str | None = None
 
 
 @dataclass(slots=True)
@@ -191,23 +197,39 @@ class VoiceSession:
             sample_rate_hz=sample_rate_hz,
             language_hint=self.config.language_hint,
         )
-        await self.bus.publish(
-            AsrFinal(
-                meta=EventMetadata(
-                    correlation_id=new_correlation_id(),
-                    producer=self.config.producer,
-                ),
-                session_id=self.session_id,
-                utterance_id=utterance_id,
-                text=transcription.text,
-                language=transcription.language,
-                confidence=transcription.confidence,
+        text = self._gate_by_name(transcription.text)
+        if text is not None:
+            await self.bus.publish(
+                AsrFinal(
+                    meta=EventMetadata(
+                        correlation_id=new_correlation_id(),
+                        producer=self.config.producer,
+                    ),
+                    session_id=self.session_id,
+                    utterance_id=utterance_id,
+                    text=text,
+                    language=transcription.language,
+                    confidence=transcription.confidence,
+                )
             )
-        )
         self._state = VoiceSessionState.IDLE
         self._current_utterance_id = None
         self._speech_ms = 0
         self._silence_ms = 0
+
+    def _gate_by_name(self, text: str) -> str | None:
+        """Name gate: None if the wake name wasn't spoken, else the request text
+        with a leading "Name," stripped. No-op (returns text) when unset."""
+        name = self.config.wake_name
+        if not name:
+            return text
+        stem = name.lower()[:4]
+        if stem not in text.lower():
+            return None
+        stripped = re.sub(
+            rf"^\s*{re.escape(stem)}\w*[\s,.!?:—-]*", "", text, count=1, flags=re.IGNORECASE
+        )
+        return stripped.strip() or text
 
     async def _publish_speech_detected(
         self, *, start_ms: int, end_ms: int, energy_db: float

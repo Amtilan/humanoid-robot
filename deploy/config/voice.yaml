@@ -19,6 +19,10 @@ session:
   max_utterance_ms: 10000
   require_wake_word: false
   wake_word_grace_ms: 1500
+  # Address the robot by name: it only answers utterances that mention "Слуга"
+  # (matched on the stem, so declensions Слугу/Слуге/Слугой also trigger).
+  # Uses the always-on ASR transcript — no separate wake-word model needed.
+  wake_name: "Слуга"
 
 # Which adapter to load for each port. Names refer to entry_points registered
 # by the installed adapter distributions. Currently available names:

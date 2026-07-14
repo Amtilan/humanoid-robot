@@ -56,6 +56,7 @@ async def _serve(settings: object) -> None:
         max_utterance_ms=composition.settings.session.max_utterance_ms,
         require_wake_word=composition.settings.session.require_wake_word,
         wake_word_grace_ms=composition.settings.session.wake_word_grace_ms,
+        wake_name=composition.settings.session.wake_name,
         producer=composition.settings.service_name,
     )
     runner = VoiceRunner(
