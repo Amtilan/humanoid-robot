@@ -1,9 +1,13 @@
 """LlmPort backed by a llama.cpp HTTP server.
 
-We hit the OpenAI-compat `/completions` endpoint (not `/chat/completions`)
-so the caller controls prompt formatting explicitly — this matches the
-grounded-QA style where the RAG orchestrator constructs the system/user
-prompt with retrieved context and expects a raw text completion.
+Two endpoints, picked by whether the request carries a grammar:
+
+* Grounded QA constrains output with a GBNF grammar → the raw `/v1/completions`
+  endpoint, where the orchestrator controls prompt formatting explicitly.
+* Free-form conversation (no grammar) → `/v1/chat/completions`, so llama.cpp
+  applies the model's own chat template (e.g. Qwen's <|im_start|> turns). An
+  instruct model driven through raw completions just continues the text and
+  rambles; the chat endpoint yields proper single-turn replies.
 """
 
 from __future__ import annotations
@@ -54,11 +58,13 @@ class LlamaCppLlm:
         return self._client
 
     async def generate(self, request: LlmRequest) -> LlmResponse:
+        chat = request.grammar_gbnf is None
+        endpoint = "/v1/chat/completions" if chat else "/v1/completions"
         payload = self._build_payload(request, stream=False)
-        response = await self._http().post("/v1/completions", json=payload)
+        response = await self._http().post(endpoint, json=payload)
         response.raise_for_status()
         body = response.json()
-        text, prompt_tokens, completion_tokens, finish_reason = _parse_completion(body)
+        text, prompt_tokens, completion_tokens, finish_reason = _parse_completion(body, chat=chat)
         return LlmResponse(
             text=text,
             prompt_tokens=prompt_tokens,
@@ -67,13 +73,15 @@ class LlamaCppLlm:
         )
 
     async def stream(self, request: LlmRequest) -> AsyncIterator[str]:
+        chat = request.grammar_gbnf is None
+        endpoint = "/v1/chat/completions" if chat else "/v1/completions"
         payload = self._build_payload(request, stream=True)
         async with self._http().stream(
-            "POST", "/v1/completions", json=payload, headers={"Accept": "text/event-stream"}
+            "POST", endpoint, json=payload, headers={"Accept": "text/event-stream"}
         ) as response:
             response.raise_for_status()
             async for line in response.aiter_lines():
-                token = _sse_token(line)
+                token = _sse_token(line, chat=chat)
                 if token is None:
                     continue
                 if not token:
@@ -86,15 +94,21 @@ class LlamaCppLlm:
             self._client = None
 
     def _build_payload(self, request: LlmRequest, *, stream: bool) -> dict[str, Any]:
-        return {
+        common: dict[str, Any] = {
             "model": self.config.model,
-            "prompt": _compose_prompt(request),
             "temperature": request.temperature,
             "max_tokens": request.max_tokens,
             "stop": list(request.stop) or None,
             "stream": stream,
-            "grammar": request.grammar_gbnf,
         }
+        if request.grammar_gbnf is None:
+            # Chat endpoint: llama.cpp applies the model's chat template.
+            messages: list[dict[str, str]] = []
+            if request.system_prompt.strip():
+                messages.append({"role": "system", "content": request.system_prompt})
+            messages.append({"role": "user", "content": request.user_prompt})
+            return {**common, "messages": messages}
+        return {**common, "prompt": _compose_prompt(request), "grammar": request.grammar_gbnf}
 
 
 def _compose_prompt(request: LlmRequest) -> str:
@@ -103,10 +117,11 @@ def _compose_prompt(request: LlmRequest) -> str:
     return request.user_prompt
 
 
-def _parse_completion(body: dict[str, Any]) -> tuple[str, int, int, str]:
+def _parse_completion(body: dict[str, Any], *, chat: bool) -> tuple[str, int, int, str]:
     choices = body.get("choices") or []
-    text = choices[0].get("text", "") if choices else ""
-    finish_reason = choices[0].get("finish_reason", "stop") if choices else "stop"
+    first = choices[0] if choices else {}
+    text = (first.get("message", {}).get("content", "") if chat else first.get("text", "")) or ""
+    finish_reason = first.get("finish_reason", "stop") if choices else "stop"
     usage = body.get("usage") or {}
     return (
         text,
@@ -116,7 +131,7 @@ def _parse_completion(body: dict[str, Any]) -> tuple[str, int, int, str]:
     )
 
 
-def _sse_token(line: str) -> str | None:
+def _sse_token(line: str, *, chat: bool) -> str | None:
     """Return the incremental text token from an SSE line, or None to skip."""
     if not line.startswith("data:"):
         return None
@@ -132,6 +147,8 @@ def _sse_token(line: str) -> str | None:
     choices = payload.get("choices") or []
     if not choices:
         return None
+    if chat:
+        return str(choices[0].get("delta", {}).get("content", ""))
     return str(choices[0].get("text", ""))
 
 
