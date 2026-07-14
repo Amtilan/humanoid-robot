@@ -42,6 +42,9 @@ _DEFAULT_FPS = 12.0
 # If a poll fails (robot busy / transient DDS), back off briefly before retry
 # so we don't spin the bus.
 _ERROR_BACKOFF_S = 0.5
+# A frame older than this (or no frame yet) means the capture loop is unhealthy;
+# also the default blocking wait for viewers/snapshots.
+_FRAME_STALE_S = 5.0
 
 
 class FrameHub:
@@ -78,7 +81,7 @@ class FrameHub:
             t0 = time.monotonic()
             try:
                 code, data = self._client.GetImageSample()
-            except Exception:  # noqa: BLE001 — never let a poll kill the loop
+            except Exception:
                 _LOG.exception("GetImageSample raised")
                 time.sleep(_ERROR_BACKOFF_S)
                 continue
@@ -98,14 +101,14 @@ class FrameHub:
                 if slack > 0:
                     time.sleep(slack)
 
-    def snapshot(self, timeout: float = 5.0) -> bytes | None:
+    def snapshot(self, timeout: float = _FRAME_STALE_S) -> bytes | None:
         """Return the current frame, waiting up to ``timeout`` for the first."""
         with self._cond:
             if self._frame is None:
                 self._cond.wait(timeout)
             return self._frame
 
-    def wait_next(self, last_seq: int, timeout: float = 5.0) -> tuple[int, bytes | None]:
+    def wait_next(self, last_seq: int, timeout: float = _FRAME_STALE_S) -> tuple[int, bytes | None]:
         """Block until a frame newer than ``last_seq`` is available."""
         with self._cond:
             if self._seq <= last_seq:
@@ -114,7 +117,7 @@ class FrameHub:
 
     @property
     def healthy(self) -> bool:
-        return self._frame is not None and (time.monotonic() - self._stamp) < 5.0
+        return self._frame is not None and (time.monotonic() - self._stamp) < _FRAME_STALE_S
 
 
 def _make_handler(hub: FrameHub, token: str) -> type[BaseHTTPRequestHandler]:
@@ -143,7 +146,7 @@ def _make_handler(hub: FrameHub, token: str) -> type[BaseHTTPRequestHandler]:
 
             return urlparse(self.path).path
 
-        def do_GET(self) -> None:  # noqa: N802 — stdlib naming
+        def do_GET(self) -> None:
             path = self._path()
             if path == "/healthz":
                 self._send_text(200 if hub.healthy else 503, "ok" if hub.healthy else "no-frame")
@@ -174,9 +177,7 @@ def _make_handler(hub: FrameHub, token: str) -> type[BaseHTTPRequestHandler]:
 
         def _serve_stream(self) -> None:
             self.send_response(200)
-            self.send_header(
-                "Content-Type", f"multipart/x-mixed-replace; boundary={_BOUNDARY}"
-            )
+            self.send_header("Content-Type", f"multipart/x-mixed-replace; boundary={_BOUNDARY}")
             self.send_header("Cache-Control", "no-store")
             self.send_header("Connection", "close")
             self.end_headers()
@@ -207,8 +208,8 @@ def _make_handler(hub: FrameHub, token: str) -> type[BaseHTTPRequestHandler]:
 
 def build_video_client(interface: str, domain: int = 0, timeout_s: float = 3.0) -> Any:
     """Initialise DDS and a ready ``VideoClient`` for the G1 front camera."""
-    from unitree_sdk2py.core.channel import ChannelFactoryInitialize
-    from unitree_sdk2py.go2.video.video_client import VideoClient
+    from unitree_sdk2py.core.channel import ChannelFactoryInitialize  # type: ignore
+    from unitree_sdk2py.go2.video.video_client import VideoClient  # type: ignore
 
     ChannelFactoryInitialize(domain, interface)
     client = VideoClient()
@@ -234,10 +235,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Unitree G1 front-camera MJPEG bridge")
     parser.add_argument("--interface", default=os.environ.get("HR_UNITREE_IFACE", "eth10"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("HR_CAMERA_PORT", "8091")))
-    parser.add_argument("--fps", type=float, default=float(os.environ.get("HR_CAMERA_FPS", _DEFAULT_FPS)))
+    parser.add_argument(
+        "--fps", type=float, default=float(os.environ.get("HR_CAMERA_FPS", _DEFAULT_FPS))
+    )
     parser.add_argument("--token", default=os.environ.get("HR_AUTH__TOKEN", ""))
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
     serve(args.interface, args.port, args.fps, args.token)
 
 

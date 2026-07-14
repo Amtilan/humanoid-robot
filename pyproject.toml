@@ -107,6 +107,9 @@ ignore = [
 # fakes mimic the same interface.
 "packages/humanoid-robot-adapters-unitree-g1/src/humanoid_robot/adapters/unitree_g1/arm.py" = ["ANN401"]
 "packages/humanoid-robot-adapters-unitree-g1/src/humanoid_robot/adapters/unitree_g1/audio_out.py" = ["ANN401"]
+# camera_mjpeg wraps the untyped vendor VideoClient (ANN401) and its stdlib
+# HTTP handler branches on route + auth (C901).
+"packages/humanoid-robot-adapters-unitree-g1/src/humanoid_robot/adapters/unitree_g1/camera_mjpeg.py" = ["ANN401", "C901"]
 "packages/humanoid-robot-adapters-unitree-g1/tests/test_arm.py" = ["N802"]
 "packages/humanoid-robot-adapters-unitree-g1/tests/test_audio_out.py" = ["N802"]
 # ASR/TTS/VAD adapters carry an injectable loader typed `Any` — the third-

@@ -73,6 +73,10 @@ services:
     restart: unless-stopped
     depends_on:
       - core
+    # nginx proxies the camera stream to the adapter's host-net bridge at
+    # host.docker.internal:8091; the mapping must exist or nginx won't start.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:8081:80"
 
