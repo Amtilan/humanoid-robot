@@ -55,6 +55,16 @@ RUN pip install --no-cache-dir uv \
         --python /workspace/.venv/bin/python \
         "git+https://github.com/unitreerobotics/unitree_sdk2_python.git"
 
+# Voice runtime. cortex-voice runs on THIS image (host net for the G1 mic +
+# speaker), and its ASR/TTS/VAD adapters lazily import these — the base image
+# ships the adapter packages but not their `[runtime]` extras, so without this
+# the pipeline reaches TTS and dies with "No module named 'piper'". All have
+# prebuilt aarch64 wheels (no source build under QEMU).
+RUN uv pip install \
+        --python /workspace/.venv/bin/python \
+        "faster-whisper>=1.1" "piper-tts>=1.2" "silero-vad>=5.1" \
+        "onnxruntime>=1.19" "numpy>=1.24"
+
 # CycloneDDS shared libs live outside the default loader path.
 ENV LD_LIBRARY_PATH=/opt/cyclonedds/lib:/opt/cyclonedds/lib64:${LD_LIBRARY_PATH:-}
 
@@ -65,3 +75,12 @@ import unitree_sdk2py.core.channel; \
 import unitree_sdk2py.g1.audio.g1_audio_client; \
 import unitree_sdk2py.g1.arm.g1_arm_action_client; \
 print('unitree_sdk2py import OK')"
+
+# Voice runtime import contract — the exact modules the ASR/TTS/VAD adapters
+# import lazily. Fail the build here rather than at first utterance.
+RUN /workspace/.venv/bin/python -c "\
+import faster_whisper; \
+import piper.voice; \
+import silero_vad; \
+import onnxruntime; \
+print('voice runtime import OK')"
