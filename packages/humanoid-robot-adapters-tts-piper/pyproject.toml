@@ -14,7 +14,7 @@ dependencies = [
 # Piper's Python bindings + ONNX runtime are optional; enable on the target:
 #     uv add humanoid-robot-adapters-tts-piper[runtime]
 [project.optional-dependencies]
-runtime = ["piper-tts>=1.2", "onnxruntime>=1.19"]
+runtime = ["piper-tts>=1.4", "onnxruntime>=1.19"]
 
 [project.entry-points."humanoid_robot.tts_adapters"]
 piper = "humanoid_robot.adapters.tts_piper.adapter:PiperTts"

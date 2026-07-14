@@ -81,7 +81,7 @@ class PiperTts:
         voice = self._resolve_voice(request.language)
         pcm = await asyncio.get_running_loop().run_in_executor(
             None,
-            lambda: b"".join(voice.synthesize_stream_raw(request.text)),
+            lambda: b"".join(c.audio_int16_bytes for c in voice.synthesize(request.text)),
         )
         fmt = _voice_format(voice)
         return AudioFrame(pcm=pcm, format=fmt, monotonic_ns=time.monotonic_ns())
@@ -98,8 +98,10 @@ class PiperTts:
 
         def _produce() -> None:
             try:
-                for raw in voice.synthesize_stream_raw(request.text):
-                    asyncio.run_coroutine_threadsafe(queue.put(raw), loop).result()
+                for chunk in voice.synthesize(request.text):
+                    asyncio.run_coroutine_threadsafe(
+                        queue.put(chunk.audio_int16_bytes), loop
+                    ).result()
             finally:
                 asyncio.run_coroutine_threadsafe(queue.put(None), loop).result()
 

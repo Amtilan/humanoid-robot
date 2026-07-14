@@ -24,12 +24,20 @@ class _FakeVoiceConfig:
 
 
 @dataclass(slots=True)
+class _FakeChunk:
+    """Mirrors piper.AudioChunk — carries raw PCM16 in audio_int16_bytes."""
+
+    audio_int16_bytes: bytes
+
+
+@dataclass(slots=True)
 class _FakeVoice:
     scripted_chunks: list[bytes] = field(default_factory=list)
     config: _FakeVoiceConfig = field(default_factory=_FakeVoiceConfig)
 
-    def synthesize_stream_raw(self, _text: str) -> Iterator[bytes]:
-        yield from self.scripted_chunks
+    def synthesize(self, _text: str, *_args: Any, **_kwargs: Any) -> Iterator[_FakeChunk]:
+        for chunk in self.scripted_chunks:
+            yield _FakeChunk(audio_int16_bytes=chunk)
 
 
 def _mk_loader(chunks: list[bytes]) -> Any:

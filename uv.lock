@@ -1885,7 +1885,7 @@ requires-dist = [
     { name = "humanoid-robot-domain", editable = "packages/humanoid-robot-domain" },
     { name = "humanoid-robot-ports", editable = "packages/humanoid-robot-ports" },
     { name = "onnxruntime", marker = "extra == 'runtime'", specifier = ">=1.19" },
-    { name = "piper-tts", marker = "extra == 'runtime'", specifier = ">=1.2" },
+    { name = "piper-tts", marker = "extra == 'runtime'", specifier = ">=1.4" },
     { name = "pydantic", specifier = ">=2.9" },
 ]
 provides-extras = ["runtime"]

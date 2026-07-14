@@ -62,7 +62,7 @@ RUN pip install --no-cache-dir uv \
 # prebuilt aarch64 wheels (no source build under QEMU).
 RUN uv pip install \
         --python /workspace/.venv/bin/python \
-        "faster-whisper>=1.1" "piper-tts>=1.2" "silero-vad>=5.1" \
+        "faster-whisper>=1.1" "piper-tts>=1.4" "silero-vad>=5.1" \
         "onnxruntime>=1.19" "numpy>=1.24"
 
 # CycloneDDS shared libs live outside the default loader path.
