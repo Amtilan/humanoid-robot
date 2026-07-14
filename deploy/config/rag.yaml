@@ -33,7 +33,9 @@ conversation:
   top_k_retrieve: 6
   top_k_context: 3
   min_context_score: 0.30
-  temperature: 0.7
+  # 0.7 let Qwen-7B-q5 drift (mid-sentence language switches); 0.4 keeps spoken
+  # replies coherent and on-language.
+  temperature: 0.4
   # Spoken chat: hard-cap length so a reply is a few seconds, not ~40s. The
   # model tends to over-explain past the "1-3 sentences" instruction; ~128
   # tokens ≈ 2-3 sentences ≈ 12s at the Orin's ~10 tok/s.
