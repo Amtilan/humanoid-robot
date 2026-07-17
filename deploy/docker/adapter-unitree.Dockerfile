@@ -28,6 +28,7 @@ RUN apt-get update \
         git \
         cmake \
         build-essential \
+        alsa-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # CycloneDDS C runtime. unitree_sdk2_python pins the 0.10.x line; keep

@@ -120,6 +120,7 @@ ignore = [
 "packages/humanoid-robot-adapters-asr-whisper/src/humanoid_robot/adapters/asr_whisper/adapter.py" = ["ANN401"]
 "packages/humanoid-robot-adapters-tts-piper/src/humanoid_robot/adapters/tts_piper/adapter.py" = ["ANN401"]
 "packages/humanoid-robot-adapters-vad-silero/src/humanoid_robot/adapters/vad_silero/adapter.py" = ["ANN401"]
+"packages/humanoid-robot-adapters-audio-alsa/src/humanoid_robot/adapters/audio_alsa/adapter.py" = ["ANN401"]
 "packages/humanoid-robot-adapters-embed-bge/src/humanoid_robot/adapters/embed_bge/adapter.py" = ["ANN401"]
 "packages/humanoid-robot-adapters-rerank-bge/src/humanoid_robot/adapters/rerank_bge/adapter.py" = ["ANN401"]
 "packages/humanoid-robot-adapters-vector-qdrant/src/humanoid_robot/adapters/vector_qdrant/adapter.py" = ["ANN401", "RUF100"]

@@ -12,6 +12,7 @@ import shutil
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -55,6 +56,22 @@ class AlsaAudioIn:
     _process_factory: _ArecordProcessFactory | None = field(default=None)
     _process: _ArecordProcess | None = field(default=None, init=False)
     _closed: bool = field(default=False, init=False)
+
+    def __init__(
+        self,
+        config: AlsaAudioInConfig | None = None,
+        _process_factory: _ArecordProcessFactory | None = None,
+        **kwargs: Any,
+    ) -> None:
+        # The voice composition resolves adapters as ``factory(**selection.config)``,
+        # so a YAML `config:` block arrives as flat keyword args — build the
+        # config model from them. An explicit `config=` (tests) still wins.
+        if config is None and kwargs:
+            config = AlsaAudioInConfig(**kwargs)
+        self.config = config or AlsaAudioInConfig()
+        self._process_factory = _process_factory
+        self._process = None
+        self._closed = False
 
     @property
     def format(self) -> AudioFormat:

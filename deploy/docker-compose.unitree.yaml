@@ -107,6 +107,13 @@ services:
   voice:
     image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_OWNER:-amtilan}/humanoid-robot-adapter-unitree:${IMAGE_TAG:-main}
     network_mode: host
+    # ALSA capture of the USB microphone needs the sound devices + the audio
+    # group. arecord ships in the adapter image (alsa-utils). Harmless when the
+    # audio_in is unitree_g1 (DDS) instead.
+    devices:
+      - /dev/snd:/dev/snd
+    group_add:
+      - audio
     environment:
       HR_VOICE__NATS__SERVERS: '["nats://127.0.0.1:4222"]'
     depends_on:

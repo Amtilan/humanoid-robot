@@ -92,3 +92,10 @@ class TestAlsaAudioIn:
 
         with pytest.raises(ValueError, match="unsupported sample width"):
             _format_flag(AlsaAudioInConfig(sample_width_bytes=3))
+
+
+def test_flat_kwargs_config_builds() -> None:
+    """Voice composition passes selection.config as flat kwargs."""
+    adapter = AlsaAudioIn(device="plughw:CARD=Device", sample_rate_hz=16000, channels=1)
+    assert adapter.config.device == "plughw:CARD=Device"
+    assert adapter.config.sample_rate_hz == 16000
