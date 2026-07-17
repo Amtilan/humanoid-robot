@@ -51,6 +51,9 @@ _WAKE_FUZZY_RATIO = 0.6
 # Longest utterance still treated as a possible "Слуга, ..." barge-in while
 # the robot is speaking; longer captures are its own speaker echo.
 _MAX_BARGE_UTTERANCE_MS = 3000
+# Half-duplex guard: keep the mic deaf this long AFTER the robot stops
+# speaking — the speaker buffer + room acoustics still carry its voice tail.
+_POST_SPEECH_GUARD_MS = 750
 
 
 class VoiceSessionState(StrEnum):
@@ -118,6 +121,8 @@ class VoiceSession:
     # (echo decoded after speech ends would otherwise read as user speech and
     # the robot would answer itself in a loop).
     _captured_while_speaking: bool = field(default=False, init=False)
+    # Remaining deafness after the robot finished speaking (half-duplex tail).
+    _deaf_guard_ms: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         if not self.config.require_wake_word:
@@ -148,6 +153,24 @@ class VoiceSession:
 
     async def _handle(self, frame: AudioFrame) -> None:
         frame_ms = len(frame.pcm) * 1000 // frame.format.bytes_per_second
+
+        # Half-duplex: DEAF while the robot speaks (plus a short tail guard).
+        # There is no acoustic echo cancellation, so listening during speech
+        # fed the robot its own voice — it interrupted itself on hearing its
+        # own name and burned ASR CPU that tore its speech apart. Muting the
+        # mic during playback is the robust fix (voice barge-in is off).
+        if self.speaker_is_speaking is not None and self.speaker_is_speaking():
+            if self._state != VoiceSessionState.IDLE:
+                self._state = VoiceSessionState.IDLE
+                self._speech_buffer.clear()
+                self._speech_ms = 0
+                self._silence_ms = 0
+                self._current_utterance_id = None
+            self._deaf_guard_ms = _POST_SPEECH_GUARD_MS
+            return
+        if self._deaf_guard_ms > 0:
+            self._deaf_guard_ms = max(0, self._deaf_guard_ms - frame_ms)
+            return
 
         if self.config.require_wake_word and self._state == VoiceSessionState.IDLE:
             await self._check_wake_word(frame)

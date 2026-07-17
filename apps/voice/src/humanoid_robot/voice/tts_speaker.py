@@ -179,11 +179,16 @@ class TtsSpeaker:
         stream = self._streams.pop(event.session_id, None)
         if stream is not None:
             # Streamed answer: the sentences were already spoken from tokens —
-            # just flush whatever tail is still buffered.
+            # just flush whatever tail is still buffered. A tail WITHOUT
+            # sentence-final punctuation is a max_tokens truncation artifact;
+            # speaking it stops the robot mid-word, so drop it (unless nothing
+            # was spoken yet — half an answer beats silence).
             duration_ms = stream.duration_ms
             tail = stream.buffer.strip()
-            if tail:
+            if tail and (_ends_sentence(tail) or duration_ms == 0):
                 duration_ms += await self._speak_cancellable(tail, language)
+            elif tail:
+                _LOG.info("tts.drop_truncated_tail", tail=tail[:60])
             await self._publish_finished(stream.utterance_id, duration_ms)
             return
         await self._speak_batch(event.text, language)
@@ -197,6 +202,12 @@ class TtsSpeaker:
         duration_ms = 0
         try:
             sentences = _split_sentences(text)
+            # Drop a truncated final fragment (no sentence-final punctuation)
+            # when there are complete sentences before it — a max_tokens cut
+            # spoken aloud stops the robot mid-word.
+            if len(sentences) > 1 and not _ends_sentence(sentences[-1]):
+                _LOG.info("tts.drop_truncated_tail", tail=sentences[-1][:60])
+                sentences = sentences[:-1]
             if not sentences:
                 return
             queue: asyncio.Queue[AudioFrame | None] = asyncio.Queue(maxsize=1)
@@ -279,6 +290,10 @@ def _frame_ms(frame: object) -> int:
         return 0
     bytes_per_second = int(fmt.bytes_per_second)
     return len(pcm) * 1000 // bytes_per_second
+
+
+def _ends_sentence(text: str) -> bool:
+    return bool(re.search(r"[.!?…]\s*$", text))
 
 
 def _split_sentences(text: str) -> list[str]:
