@@ -147,9 +147,15 @@ def _sse_token(line: str, *, chat: bool) -> str | None:
     choices = payload.get("choices") or []
     if not choices:
         return None
+    # Contract: "" = end-of-stream ([DONE] above), None = skip this line.
+    # `content`/`text` may be present-but-null (e.g. the first chat chunk
+    # carries only the role) — such chunks are SKIPPED, not treated as the
+    # end sentinel and not leaked as the string "None".
     if chat:
-        return str(choices[0].get("delta", {}).get("content", ""))
-    return str(choices[0].get("text", ""))
+        content = choices[0].get("delta", {}).get("content")
+        return str(content) if content else None
+    text = choices[0].get("text")
+    return str(text) if text else None
 
 
 def build_llama_cpp_llm(**kwargs: object) -> LlamaCppLlm:
