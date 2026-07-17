@@ -111,8 +111,11 @@ class SileroVad:
 
         def _predict(samples: list[float]) -> float:
             import numpy as np
+            import torch
 
-            tensor = np.array(samples, dtype=np.float32)
+            # silero-vad 5/6's OnnxWrapper validates input with torch tensor
+            # methods (x.dim()), so a bare numpy array raises AttributeError.
+            tensor = torch.from_numpy(np.array(samples, dtype=np.float32))
             return float(model(tensor, _MODEL_SAMPLE_RATE_HZ))
 
         self._predictor = _predict

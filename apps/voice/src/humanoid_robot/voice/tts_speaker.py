@@ -43,6 +43,10 @@ class TtsSpeaker:
     bus: EventBusPort
     session_id: SessionId
     producer: str = "cortex-voice"
+    # When true, speak EVERY llm.answer, not just this voice session's — so
+    # text chat / browser push-to-talk answers are also spoken aloud. Useful
+    # when the robot's own mic can't be used and input comes from the dashboard.
+    speak_all: bool = False
 
     async def start(self) -> Subscription:
         """Subscribe to `llm.answer` — returns the handle for later cancel."""
@@ -51,7 +55,7 @@ class TtsSpeaker:
     async def _on_llm_answer(self, event: BaseEvent) -> None:
         if not isinstance(event, LlmAnswer):
             return
-        if event.session_id != self.session_id:
+        if not self.speak_all and event.session_id != self.session_id:
             return
         utterance_id = new_utterance_id()
         await self._publish_started(utterance_id)

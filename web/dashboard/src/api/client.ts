@@ -66,6 +66,15 @@ export function robotCameraSnapshotUrl(cameraId = "front"): string {
   return withToken(`/api/v1/robot/camera/${encodeURIComponent(cameraId)}/snapshot`);
 }
 
+// Live mic monitor (streaming WAV from the robot's head mic). The raw feed is
+// very quiet, so a software gain is applied server-side via ?gain=.
+export function robotMicStreamUrl(gain = 20): string {
+  const qs = new URLSearchParams({ gain: String(gain) });
+  const token = getAuthToken();
+  if (token) qs.set("token", token);
+  return `/api/v1/robot/mic/stream?${qs.toString()}`;
+}
+
 async function guard<T>(response: Response, url: string, fallback: () => Promise<T>): Promise<T> {
   if (response.status === 401) {
     fireUnauthorized();

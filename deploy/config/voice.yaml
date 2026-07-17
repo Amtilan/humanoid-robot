@@ -23,6 +23,10 @@ session:
   # (matched on the stem, so declensions Слугу/Слуге/Слугой also trigger).
   # Uses the always-on ASR transcript — no separate wake-word model needed.
   wake_name: "Слуга"
+  # Speak answers from ANY source (dashboard chat + browser push-to-talk), not
+  # only the robot-mic session — so you can talk via your phone and the robot
+  # replies aloud, bypassing its own noisy mic.
+  speak_all_answers: true
 
 # Which adapter to load for each port. Names refer to entry_points registered
 # by the installed adapter distributions. Currently available names:
@@ -38,7 +42,18 @@ stack:
   # docker-compose.unitree.yaml). For a dev laptop use `alsa` or `null`.
   audio_in:
     name: unitree_g1
-    config: {}
+    config:
+      # Join the mic multicast group on the eth10 IP explicitly. Without this
+      # the IGMP membership follows the default route (wlan0, since egress is
+      # routed there) and the G1 mic stream — which lives on eth10 — never
+      # arrives, so the robot "can't hear".
+      interface_ip: "192.168.123.164"  # pragma: allowlist secret
+      # This G1 firmware multicasts 16 kHz MONO (measured ~32 kB/s, 5120-byte
+      # packets), not the 6-channel far-field array the default assumes —
+      # treating it as 6ch takes every 6th sample and hands VAD/ASR garbage.
+      input_channels: 1
+      # Packets are 5120 B; the 4096 default truncates each datagram.
+      recv_buffer_bytes: 8192
   # G1 speaker via the vendor SDK AudioClient; inits DDS on eth10 on first
   # use. Use `null` in CI / on a laptop where nothing should make a sound.
   audio_out:
@@ -49,15 +64,17 @@ stack:
   vad:
     name: silero_v5
     config: {}
-  # Point ASR at the LOCAL fetched model dir — the HF hub id
-  # "large-v3-turbo" resolves to a now-gated repo. CPU on the base image
-  # (no CUDA userspace); int8 keeps it fast enough for short utterances.
+  # ASR points at a LOCAL model dir. large-v3-turbo is accurate but ~RTF 4 on
+  # this CPU (≈13 s for a short reply); `small` is ~RTF 1 (≈3 s) with fine
+  # Russian quality for short spoken commands. beam_size 1 (greedy) trims a bit
+  # more. Swap back to the large dir for max accuracy at the cost of latency.
   asr:
     name: faster_whisper
     config:
-      model_id: /var/lib/humanoid-robot/models/faster-whisper-large-v3-turbo
+      model_id: /var/lib/humanoid-robot/models/faster-whisper-small
       device: cpu
       compute_type: int8
+      beam_size: 1
   tts:
     name: piper
     config:

@@ -74,6 +74,31 @@ services:
       retries: 6
       start_period: 15s
 
+  # Live mic monitor — "the robot's hearing". Streams the head-mic multicast
+  # as WAV so the dashboard can play what the robot hears (:8092, proxied by
+  # the dashboard nginx at /api/v1/robot/mic/). Same host-net pattern as
+  # camera; the mic multicast lives on eth10.
+  mic:
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_OWNER:-amtilan}/humanoid-robot-adapter-unitree:${IMAGE_TAG:-main}
+    network_mode: host
+    restart: unless-stopped
+    entrypoint: ["python", "-m", "humanoid_robot.adapters.unitree_g1.mic_stream"]
+    command:
+      - "--interface-ip"
+      - "${HR_MIC_IFACE_IP:-192.168.123.164}"
+      - "--port"
+      - "${HR_MIC_PORT:-8092}"
+    environment:
+      HR_AUTH__TOKEN: "${HR_AUTH__TOKEN:-}"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8092/healthz')\" || exit 1"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
   # Voice needs the vendor SDK (G1 speaker AudioClient) AND host networking
   # (the G1 mic is a UDP multicast on 239.168.123.161 over eth10, and the
   # speaker inits DDS on eth10). So it runs the adapter image on host net,

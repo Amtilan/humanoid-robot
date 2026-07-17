@@ -68,6 +68,7 @@ async def _serve(settings: object) -> None:
         bus=composition.bus,
         wake_word=composition.wake_word,
         config=session_cfg,
+        speak_all=composition.settings.session.speak_all_answers,
     )
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):

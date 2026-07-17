@@ -9,13 +9,16 @@ dependencies = [
     "pydantic>=2.9",
     "humanoid-robot-domain",
     "humanoid-robot-ports",
+    # numpy is used unconditionally in _pcm16_to_float32 (faster-whisper needs a
+    # float32 ndarray), so it's a base dep — not a runtime-only extra.
+    "numpy>=1.24",
 ]
 
 # `faster-whisper` and its native runtime dependencies are optional to keep
 # CI / laptop installs light. Enable on the robot with:
 #     uv add humanoid-robot-adapters-asr-whisper[runtime]
 [project.optional-dependencies]
-runtime = ["faster-whisper>=1.1", "numpy>=1.24"]
+runtime = ["faster-whisper>=1.1"]
 
 [project.entry-points."humanoid_robot.asr_adapters"]
 faster_whisper = "humanoid_robot.adapters.asr_whisper.adapter:FasterWhisperAsr"

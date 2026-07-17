@@ -1654,13 +1654,13 @@ source = { editable = "packages/humanoid-robot-adapters-asr-whisper" }
 dependencies = [
     { name = "humanoid-robot-domain" },
     { name = "humanoid-robot-ports" },
+    { name = "numpy" },
     { name = "pydantic" },
 ]
 
 [package.optional-dependencies]
 runtime = [
     { name = "faster-whisper" },
-    { name = "numpy" },
 ]
 
 [package.metadata]
@@ -1668,7 +1668,7 @@ requires-dist = [
     { name = "faster-whisper", marker = "extra == 'runtime'", specifier = ">=1.1" },
     { name = "humanoid-robot-domain", editable = "packages/humanoid-robot-domain" },
     { name = "humanoid-robot-ports", editable = "packages/humanoid-robot-ports" },
-    { name = "numpy", marker = "extra == 'runtime'", specifier = ">=1.24" },
+    { name = "numpy", specifier = ">=1.24" },
     { name = "pydantic", specifier = ">=2.9" },
 ]
 provides-extras = ["runtime"]

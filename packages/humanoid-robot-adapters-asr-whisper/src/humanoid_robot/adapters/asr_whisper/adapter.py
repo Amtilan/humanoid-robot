@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import asyncio
 import importlib
-import struct
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
@@ -182,8 +181,12 @@ class FasterWhisperAsr:
         )
 
 
-def _pcm16_to_float32(pcm: bytes) -> list[float]:
+def _pcm16_to_float32(pcm: bytes) -> Any:
+    # faster-whisper's transcribe() needs a float32 numpy array; a plain list
+    # (or bytes) makes it try to decode the audio as a media file and fail with
+    # "File object has no read() method".
+    import numpy as np
+
     if not pcm:
-        return []
-    samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
-    return [s / 32768.0 for s in samples]
+        return np.zeros(0, dtype=np.float32)
+    return np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0

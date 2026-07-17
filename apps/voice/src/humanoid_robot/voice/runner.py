@@ -50,6 +50,7 @@ class VoiceRunner:
     wake_word: WakeWordPort | None = None
     config: VoiceSessionConfig = field(default_factory=VoiceSessionConfig)
     session_id: SessionId = field(default_factory=new_session_id)
+    speak_all: bool = False
     _stop: asyncio.Event = field(default_factory=asyncio.Event)
     _tts_sub: Subscription | None = None
 
@@ -71,6 +72,7 @@ class VoiceRunner:
             bus=self.bus,
             session_id=self.session_id,
             producer=self.config.producer,
+            speak_all=self.speak_all,
         )
         self._tts_sub = await speaker.start()
         _LOG.info("voice_runner.ready", session_id=self.session_id)

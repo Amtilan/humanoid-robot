@@ -198,6 +198,12 @@ class VoiceSession:
             language_hint=self.config.language_hint,
         )
         text = self._gate_by_name(transcription.text)
+        _LOG.info(
+            "voice.utterance",
+            heard=transcription.text,
+            forwarded=text,
+            gated_out=text is None,
+        )
         if text is not None:
             await self.bus.publish(
                 AsrFinal(

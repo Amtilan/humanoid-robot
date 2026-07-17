@@ -1,4 +1,5 @@
 import { useEventSubscription, type EventEnvelope } from "./eventStream";
+import { outcomeLabel } from "./labels";
 import { useToast } from "./toast";
 
 const isNoticeSubject = (subject: string) =>
@@ -19,7 +20,7 @@ export function BusToastBridge() {
         if (status && status !== "healthy" && status !== "ready" && status !== "ok") {
           push({
             kind: "warning",
-            title: `system.health: ${status}`,
+            title: `Состояние системы: ${status}`,
             description: pickString(envelope.data, "detail") ?? undefined,
           });
         }
@@ -28,21 +29,21 @@ export function BusToastBridge() {
       case "system.ota.available":
         push({
           kind: "info",
-          title: "OTA update available",
+          title: "Доступно обновление",
           description: describeVersion(envelope),
         });
         return;
       case "system.ota.applied":
         push({
           kind: "success",
-          title: "OTA update applied",
+          title: "Обновление установлено",
           description: describeVersion(envelope),
         });
         return;
       case "llm.rejected":
         push({
           kind: "warning",
-          title: "LLM answer rejected",
+          title: "Робот не смог ответить",
           description:
             pickString(envelope.data, "reason") ??
             pickString(envelope.data, "fallback_text") ??
@@ -50,15 +51,25 @@ export function BusToastBridge() {
         });
         return;
       case "robot.command.result": {
-        const ok = envelope.data.success === true;
-        if (!ok) {
+        // Payload nests the verdict: data.result = { outcome, error_code,
+        // error_message }; outcome "accepted" is the only success.
+        const result = envelope.data.result;
+        const outcome =
+          typeof result === "object" && result !== null
+            ? (result as Record<string, unknown>).outcome
+            : undefined;
+        if (typeof outcome === "string" && outcome !== "accepted") {
+          const message =
+            typeof result === "object" && result !== null
+              ? (result as Record<string, unknown>).error_message
+              : undefined;
           push({
             kind: "error",
-            title: "Robot command failed",
+            title: "Команда не выполнена",
             description:
-              pickString(envelope.data, "error") ??
-              pickString(envelope.data, "command_id") ??
-              undefined,
+              typeof message === "string" && message
+                ? `${outcomeLabel(outcome)}: ${message}`
+                : outcomeLabel(outcome),
           });
         }
         return;
@@ -66,7 +77,7 @@ export function BusToastBridge() {
       case "security.audit":
         push({
           kind: "info",
-          title: "Security audit event",
+          title: "Событие безопасности",
           description: pickString(envelope.data, "action") ?? undefined,
         });
     }
@@ -77,7 +88,7 @@ export function BusToastBridge() {
 
 function describeVersion(envelope: EventEnvelope): string | undefined {
   const version = pickString(envelope.data, "version");
-  return version ? `version ${version}` : undefined;
+  return version ? `версия ${version}` : undefined;
 }
 
 function pickString(data: Record<string, unknown>, key: string): string | null {
