@@ -19,10 +19,13 @@ session:
   max_utterance_ms: 10000
   require_wake_word: false
   wake_word_grace_ms: 1500
-  # Address the robot by name: it only answers utterances that mention "Слуга"
-  # (matched on the stem, so declensions Слугу/Слуге/Слугой also trigger).
-  # Uses the always-on ASR transcript — no separate wake-word model needed.
+  # The robot's name. In interrupt_only mode the dialogue is free-flowing
+  # (any speech is answered while the robot is silent), and the name is the
+  # STOP word: saying "Слуга…" while the robot talks cuts it off; other
+  # speech during its talking is ignored (also self-echo protection).
+  # Switch to "always" to require the name in every utterance.
   wake_name: "Слуга"
+  wake_name_mode: interrupt_only
   # Speak answers from ANY source (dashboard chat + browser push-to-talk), not
   # only the robot-mic session — so you can talk via your phone and the robot
   # replies aloud, bypassing its own noisy mic.

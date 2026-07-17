@@ -96,6 +96,13 @@ class TtsSpeaker:
     # dropped instead of spoken (the user talked over the robot).
     _muted: set[str] = field(default_factory=set)
     _current: asyncio.Task[int] | None = field(default=None)
+    # >0 while an answer is being spoken (start..finished); exposed so the
+    # session can apply "interrupt only by name while the robot talks".
+    _speaking_depth: int = field(default=0)
+
+    @property
+    def speaking(self) -> bool:
+        return self._speaking_depth > 0
 
     async def start(self) -> Subscription:
         """Subscribe to answer + token events — returns one cancel handle."""
@@ -112,6 +119,9 @@ class TtsSpeaker:
         for session_id in self._streams:
             self._muted.add(session_id)
         self._streams.clear()
+        # Interrupted streams never reach their _publish_finished — don't let
+        # the speaking flag stick.
+        self._speaking_depth = 0
         with contextlib.suppress(Exception):
             await self.audio_out.stop()
 
@@ -234,6 +244,7 @@ class TtsSpeaker:
         return getattr(event, "language", Language.RU)
 
     async def _publish_started(self, utterance_id: UtteranceId) -> None:
+        self._speaking_depth += 1
         await self.bus.publish(
             TtsSynthesisStarted(
                 meta=EventMetadata(
@@ -246,6 +257,7 @@ class TtsSpeaker:
         )
 
     async def _publish_finished(self, utterance_id: UtteranceId, duration_ms: int) -> None:
+        self._speaking_depth = max(0, self._speaking_depth - 1)
         await self.bus.publish(
             TtsSynthesisFinished(
                 meta=EventMetadata(

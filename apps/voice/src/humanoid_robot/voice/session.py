@@ -48,8 +48,6 @@ _LOG = get_logger("cortex-voice.session")
 
 # Similarity threshold for the fuzzy wake-name match on the first word.
 _WAKE_FUZZY_RATIO = 0.6
-# Sustained-speech threshold before firing the barge-in hook (filters clicks).
-_BARGE_IN_AFTER_MS = 200
 
 
 class VoiceSessionState(StrEnum):
@@ -80,6 +78,12 @@ class VoiceSessionConfig(BaseModel):
     # the first 4 chars so Russian declensions "Слуга/Слугу/Слуге" all trigger).
     # Reuses the always-on ASR — no separate wake-word model needed.
     wake_name: str | None = None
+    # "always"          — every forwarded utterance must mention the name.
+    # "interrupt_only"  — free-flowing dialogue: any speech is answered while
+    #                     the robot is silent, but while it is SPEAKING only an
+    #                     utterance with the name gets through (and cuts it
+    #                     off). Doubles as self-echo protection.
+    wake_name_mode: str = "always"
 
 
 @dataclass(slots=True)
@@ -92,17 +96,18 @@ class VoiceSession:
     wake_word: WakeWordPort | None = None
     config: VoiceSessionConfig = field(default_factory=VoiceSessionConfig)
     session_id: SessionId = field(default_factory=new_session_id)
-    # Barge-in hook: awaited once per utterance after ~200 ms of sustained
-    # speech — the runner wires it to TtsSpeaker.interrupt so the robot stops
-    # talking the moment the user talks over it.
+    # Barge-in hook — the runner wires it to TtsSpeaker.interrupt. In
+    # "interrupt_only" mode it fires from the decode path when the transcript
+    # contains the wake name while the robot is speaking.
     on_user_speech: Callable[[], Awaitable[None]] | None = None
+    # Runner-wired probe: is the robot speaking right now (TtsSpeaker.speaking)?
+    speaker_is_speaking: Callable[[], bool] | None = None
     _state: VoiceSessionState = field(default=VoiceSessionState.IDLE, init=False)
     _speech_buffer: bytearray = field(default_factory=bytearray, init=False)
     _speech_ms: int = field(default=0, init=False)
     _silence_ms: int = field(default=0, init=False)
     _armed_grace_ms: int = field(default=0, init=False)
     _current_utterance_id: UtteranceId | None = field(default=None, init=False)
-    _interrupt_fired: bool = field(default=False, init=False)
     _decode_tasks: set[asyncio.Task[None]] = field(default_factory=set, init=False)
     _decode_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
 
@@ -173,7 +178,6 @@ class VoiceSession:
             self._speech_ms = 0
             self._silence_ms = 0
             self._speech_buffer.clear()
-            self._interrupt_fired = False
             await self._publish_speech_detected(
                 start_ms=self._speech_ms,
                 end_ms=self._speech_ms + frame_ms,
@@ -182,14 +186,6 @@ class VoiceSession:
         self._speech_buffer.extend(frame.pcm)
         self._speech_ms += frame_ms
         self._silence_ms = 0
-        # Barge-in: sustained speech (not a click) → cut the robot off once.
-        if (
-            not self._interrupt_fired
-            and self.on_user_speech is not None
-            and self._speech_ms >= _BARGE_IN_AFTER_MS
-        ):
-            self._interrupt_fired = True
-            await self.on_user_speech()
         if self._speech_ms >= self.config.max_utterance_ms:
             await self._finalize(frame.format.sample_rate_hz)
 
@@ -250,33 +246,58 @@ class VoiceSession:
                     sample_rate_hz=sample_rate_hz,
                     language_hint=self.config.language_hint,
                 )
-            text = self._gate_by_name(transcription.text)
+            named, stripped = self._match_wake_name(transcription.text)
+            speaking = self.speaker_is_speaking() if self.speaker_is_speaking else False
+            text = self._resolve_forward(
+                transcription.text, named=named, stripped=stripped, speaking=speaking
+            )
             _LOG.info(
                 "voice.utterance",
                 heard=transcription.text,
                 forwarded=text,
                 gated_out=text is None,
+                named=named,
+                robot_speaking=speaking,
             )
-            if text is not None:
-                await self.bus.publish(
-                    AsrFinal(
-                        meta=EventMetadata(
-                            correlation_id=new_correlation_id(),
-                            producer=self.config.producer,
-                        ),
-                        session_id=self.session_id,
-                        utterance_id=utterance_id,
-                        text=text,
-                        language=transcription.language,
-                        confidence=transcription.confidence,
-                    )
+            if text is None:
+                return
+            if speaking and named and self.on_user_speech is not None:
+                # The user called the robot by name over its own speech —
+                # cut it off before answering.
+                await self.on_user_speech()
+            await self.bus.publish(
+                AsrFinal(
+                    meta=EventMetadata(
+                        correlation_id=new_correlation_id(),
+                        producer=self.config.producer,
+                    ),
+                    session_id=self.session_id,
+                    utterance_id=utterance_id,
+                    text=text,
+                    language=transcription.language,
+                    confidence=transcription.confidence,
                 )
+            )
         except Exception:
             _LOG.exception("voice.decode_failed")
 
-    def _gate_by_name(self, text: str) -> str | None:
-        """Name gate: None if the wake name wasn't spoken, else the request text
-        with a leading "Name," stripped. No-op (returns text) when unset.
+    def _resolve_forward(
+        self, text: str, *, named: bool, stripped: str, speaking: bool
+    ) -> str | None:
+        """Apply the wake-name policy; returns the text to forward or None."""
+        if not self.config.wake_name:
+            return text
+        if self.config.wake_name_mode == "interrupt_only":
+            if speaking and not named:
+                # Robot is talking: ignore anything not addressed to it —
+                # this also keeps it from hearing its own speaker echo.
+                return None
+            return stripped if named else text
+        # "always": only named utterances get through.
+        return stripped if named else None
+
+    def _match_wake_name(self, text: str) -> tuple[bool, str]:
+        """Detect the wake name and strip it: (named, text-without-leading-name).
 
         Matches the wake name's stem exactly OR fuzzily against the first word
         (the ASR sometimes mangles the leading wake word); the fuzzy pass keeps
@@ -285,7 +306,7 @@ class VoiceSession:
         """
         name = self.config.wake_name
         if not name:
-            return text
+            return False, text
         stem = name.lower()[:4]
         lower = text.lower()
         matched = stem in lower
@@ -294,7 +315,7 @@ class VoiceSession:
             if first and SequenceMatcher(None, first, name.lower()).ratio() >= _WAKE_FUZZY_RATIO:
                 matched = True
         if not matched:
-            return None
+            return False, text
         stripped = re.sub(
             rf"^\s*\W*(?:{re.escape(stem)}\w*|\w+)\W*[\s,.!?:—-]*",
             "",
@@ -302,7 +323,7 @@ class VoiceSession:
             count=1,
             flags=re.IGNORECASE,
         )
-        return stripped.strip() or text
+        return True, (stripped.strip() or text)
 
     async def _publish_speech_detected(
         self, *, start_ms: int, end_ms: int, energy_db: float

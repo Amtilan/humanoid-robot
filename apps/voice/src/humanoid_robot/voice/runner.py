@@ -73,8 +73,9 @@ class VoiceRunner:
             wake_word=self.wake_word,
             config=self.config,
             session_id=self.session_id,
-            # Barge-in: user speech cuts the robot's speech off immediately.
+            # Barge-in: a wake-named utterance cuts the robot's speech off.
             on_user_speech=speaker.interrupt,
+            speaker_is_speaking=lambda: speaker.speaking,
         )
         self._tts_sub = await speaker.start()
         _LOG.info("voice_runner.ready", session_id=self.session_id)
