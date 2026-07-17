@@ -243,6 +243,7 @@ module = [
     "qdrant_client.*",
     "docling",
     "docling.*",
+    "torch",
 ]
 ignore_missing_imports = true
 

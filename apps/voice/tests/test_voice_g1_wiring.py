@@ -51,18 +51,22 @@ class _ScriptedTts:
     def __init__(self) -> None:
         self.calls: list[TtsRequest] = []
 
+    def _frame(self) -> AudioFrame:
+        # ~1 s of silence at 16 kHz mono 16-bit
+        return AudioFrame(pcm=b"\x00\x00" * 16_000, format=_G1_FORMAT, monotonic_ns=0)
+
     def synthesize_stream(self, req: TtsRequest) -> AsyncIterator[AudioFrame]:
         self.calls.append(req)
+        frame = self._frame()
 
         async def _gen() -> AsyncIterator[AudioFrame]:
-            # ~1 s of silence at 16 kHz mono 16-bit
-            yield AudioFrame(
-                pcm=b"\x00\x00" * 16_000,
-                format=_G1_FORMAT,
-                monotonic_ns=0,
-            )
+            yield frame
 
         return _gen()
+
+    async def synthesize(self, req: TtsRequest) -> AudioFrame:
+        self.calls.append(req)
+        return self._frame()
 
 
 def _llm_answer(session_id: Any, text: str = "Всё готово.") -> LlmAnswer:
