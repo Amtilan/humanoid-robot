@@ -48,6 +48,7 @@ class SessionSettings(BaseModel):
     require_wake_word: bool = False
     wake_word_grace_ms: int = 1_500
     wake_name: str | None = None
+    wake_name_mode: str = "always"
     # Speak every llm.answer (text chat / browser push-to-talk), not just the
     # robot-mic session's — lets the robot talk back when input comes from the
     # dashboard instead of its own (poor) mic.
