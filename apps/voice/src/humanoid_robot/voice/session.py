@@ -48,6 +48,9 @@ _LOG = get_logger("cortex-voice.session")
 
 # Similarity threshold for the fuzzy wake-name match on the first word.
 _WAKE_FUZZY_RATIO = 0.6
+# Longest utterance still treated as a possible "Слуга, ..." barge-in while
+# the robot is speaking; longer captures are its own speaker echo.
+_MAX_BARGE_UTTERANCE_MS = 3000
 
 
 class VoiceSessionState(StrEnum):
@@ -110,6 +113,11 @@ class VoiceSession:
     _current_utterance_id: UtteranceId | None = field(default=None, init=False)
     _decode_tasks: set[asyncio.Task[None]] = field(default_factory=set, init=False)
     _decode_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
+    # True if ANY frame of the current utterance was captured while the robot
+    # was speaking — the policy must use capture-time state, not decode-time
+    # (echo decoded after speech ends would otherwise read as user speech and
+    # the robot would answer itself in a loop).
+    _captured_while_speaking: bool = field(default=False, init=False)
 
     def __post_init__(self) -> None:
         if not self.config.require_wake_word:
@@ -178,11 +186,14 @@ class VoiceSession:
             self._speech_ms = 0
             self._silence_ms = 0
             self._speech_buffer.clear()
+            self._captured_while_speaking = False
             await self._publish_speech_detected(
                 start_ms=self._speech_ms,
                 end_ms=self._speech_ms + frame_ms,
                 energy_db=_prob_to_db(decision.speech_probability),
             )
+        if self.speaker_is_speaking is not None and self.speaker_is_speaking():
+            self._captured_while_speaking = True
         self._speech_buffer.extend(frame.pcm)
         self._speech_ms += frame_ms
         self._silence_ms = 0
@@ -221,13 +232,25 @@ class VoiceSession:
         """
         utterance_id = self._current_utterance_id or new_utterance_id()
         payload = bytes(self._speech_buffer)
+        captured_while_speaking = self._captured_while_speaking
         self._speech_buffer.clear()
         self._state = VoiceSessionState.IDLE
         self._current_utterance_id = None
         self._speech_ms = 0
         self._silence_ms = 0
+        self._captured_while_speaking = False
+        # Cheap echo shed: an utterance captured while the robot was talking
+        # that is LONGER than any realistic "Слуга, стоп" is the robot's own
+        # speaker bleeding into the mic — don't burn whisper CPU on it (that
+        # contention is what tears the robot's speech apart).
+        duration_ms = len(payload) * 1000 // (sample_rate_hz * 2)
+        if captured_while_speaking and duration_ms > _MAX_BARGE_UTTERANCE_MS:
+            _LOG.info("voice.echo_shed", duration_ms=duration_ms)
+            return
         task = asyncio.create_task(
-            self._decode_and_publish(payload, sample_rate_hz, utterance_id),
+            self._decode_and_publish(
+                payload, sample_rate_hz, utterance_id, captured_while_speaking
+            ),
             name=f"voice-decode[{utterance_id}]",
         )
         self._decode_tasks.add(task)
@@ -238,6 +261,7 @@ class VoiceSession:
         payload: bytes,
         sample_rate_hz: int,
         utterance_id: UtteranceId,
+        captured_while_speaking: bool,
     ) -> None:
         try:
             async with self._decode_lock:
@@ -247,7 +271,9 @@ class VoiceSession:
                     language_hint=self.config.language_hint,
                 )
             named, stripped = self._match_wake_name(transcription.text)
-            speaking = self.speaker_is_speaking() if self.speaker_is_speaking else False
+            # Policy uses CAPTURE-time state: an echo of the robot's own voice
+            # decoded after it finished speaking must not read as user speech.
+            speaking = captured_while_speaking
             text = self._resolve_forward(
                 transcription.text, named=named, stripped=stripped, speaking=speaking
             )
