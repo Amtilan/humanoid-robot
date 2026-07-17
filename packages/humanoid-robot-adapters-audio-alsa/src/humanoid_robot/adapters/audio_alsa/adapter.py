@@ -47,6 +47,10 @@ class AlsaAudioInConfig(BaseModel):
 # `stdout` (readable) and `terminate/wait` methods. Overridable for tests.
 _ArecordProcess = asyncio.subprocess.Process
 
+# Capture queue depth: 2 s of 50 ms frames. Deep enough to ride out a slow
+# consumer moment, shallow enough that dropped-oldest keeps audio realtime.
+_QUEUE_MAX_FRAMES = 40
+
 
 @dataclass(slots=True)
 class AlsaAudioIn:
@@ -90,13 +94,43 @@ class AlsaAudioIn:
             if stdout is None:
                 msg = "arecord subprocess has no stdout — cannot stream"
                 raise RuntimeError(msg)
-            while not self._closed:
-                data = await stdout.readexactly(frame_bytes)
-                yield AudioFrame(
-                    pcm=data,
-                    format=fmt,
-                    monotonic_ns=time.monotonic_ns(),
-                )
+
+            # Continuous capture: a dedicated reader task drains arecord into a
+            # bounded queue so the pipe NEVER backs up — even if the consumer
+            # stalls (e.g. a slow downstream await), capture keeps running and
+            # we drop the OLDEST frames instead of blocking arecord into an
+            # ALSA overrun (which is what made the mic "cut out").
+            queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=_QUEUE_MAX_FRAMES)
+
+            async def _reader() -> None:
+                try:
+                    while not self._closed:
+                        data = await stdout.readexactly(frame_bytes)
+                        if queue.full():
+                            with contextlib.suppress(asyncio.QueueEmpty):
+                                queue.get_nowait()  # drop oldest, keep realtime
+                        await queue.put(data)
+                except (asyncio.IncompleteReadError, ConnectionResetError):
+                    pass
+                finally:
+                    with contextlib.suppress(asyncio.QueueFull):
+                        queue.put_nowait(None)
+
+            reader = asyncio.create_task(_reader(), name="alsa-capture")
+            try:
+                while not self._closed:
+                    data = await queue.get()
+                    if data is None:
+                        break
+                    yield AudioFrame(
+                        pcm=data,
+                        format=fmt,
+                        monotonic_ns=time.monotonic_ns(),
+                    )
+            finally:
+                reader.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await reader
 
         return _gen()
 

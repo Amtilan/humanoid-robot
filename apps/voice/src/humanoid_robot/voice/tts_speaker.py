@@ -16,6 +16,7 @@ machine. The two share the same session id via the runner.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
 from dataclasses import dataclass, field
 
@@ -91,6 +92,10 @@ class TtsSpeaker:
     # when the robot's own mic can't be used and input comes from the dashboard.
     speak_all: bool = False
     _streams: dict[str, _TokenStream] = field(default_factory=dict)
+    # Sessions muted by a barge-in: their remaining tokens/final answer are
+    # dropped instead of spoken (the user talked over the robot).
+    _muted: set[str] = field(default_factory=set)
+    _current: asyncio.Task[int] | None = field(default=None)
 
     async def start(self) -> Subscription:
         """Subscribe to answer + token events — returns one cancel handle."""
@@ -98,13 +103,36 @@ class TtsSpeaker:
         token_sub = await self.bus.subscribe(LlmAnswerToken.subject, self._on_token)
         return _MultiSub([answer_sub, token_sub])
 
+    async def interrupt(self) -> None:
+        """Barge-in: the user started talking — stop speaking NOW and mute the
+        in-flight answers so their remaining sentences aren't spoken."""
+        task = self._current
+        if task is not None and not task.done():
+            task.cancel()
+        for session_id in self._streams:
+            self._muted.add(session_id)
+        self._streams.clear()
+        with contextlib.suppress(Exception):
+            await self.audio_out.stop()
+
     def _wants(self, session_id: str) -> bool:
         return self.speak_all or session_id == self.session_id
+
+    async def _speak_cancellable(self, text: str, language: Language) -> int:
+        """Speak one chunk in a task `interrupt()` can cancel; returns ms
+        spoken (0 when interrupted)."""
+        self._current = asyncio.create_task(self._speak(text, language))
+        try:
+            return await self._current
+        except asyncio.CancelledError:
+            return 0
+        finally:
+            self._current = None
 
     async def _on_token(self, event: BaseEvent) -> None:
         if not isinstance(event, LlmAnswerToken):
             return
-        if not self._wants(event.session_id):
+        if not self._wants(event.session_id) or event.session_id in self._muted:
             return
         stream = self._streams.get(event.session_id)
         if stream is None:
@@ -123,10 +151,17 @@ class TtsSpeaker:
                 break
             sentence, stream.buffer = match.group(1).strip(), match.group(2)
             if sentence:
-                stream.duration_ms += await self._speak(sentence, Language.RU)
+                stream.duration_ms += await self._speak_cancellable(sentence, Language.RU)
+            if event.session_id in self._muted:
+                # Interrupted mid-stream — drop the rest.
+                return
 
     async def _on_llm_answer(self, event: BaseEvent) -> None:
         if not isinstance(event, LlmAnswer):
+            return
+        if event.session_id in self._muted:
+            # The user talked over this answer — swallow its final event.
+            self._muted.discard(event.session_id)
             return
         if not self._wants(event.session_id):
             return
@@ -138,7 +173,7 @@ class TtsSpeaker:
             duration_ms = stream.duration_ms
             tail = stream.buffer.strip()
             if tail:
-                duration_ms += await self._speak(tail, language)
+                duration_ms += await self._speak_cancellable(tail, language)
             await self._publish_finished(stream.utterance_id, duration_ms)
             return
         await self._speak_batch(event.text, language)
@@ -169,12 +204,23 @@ class TtsSpeaker:
                     frame = await queue.get()
                     if frame is None:
                         break
-                    await self.audio_out.play(frame)
-                    duration_ms += _frame_ms(frame)
+                    self._current = asyncio.create_task(self._play_frame(frame))
+                    try:
+                        duration_ms += await self._current
+                    except asyncio.CancelledError:
+                        break  # barge-in — stop this answer
+                    finally:
+                        self._current = None
             finally:
-                await producer
+                producer.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await producer
         finally:
             await self._publish_finished(utterance_id, duration_ms)
+
+    async def _play_frame(self, frame: AudioFrame) -> int:
+        await self.audio_out.play(frame)
+        return _frame_ms(frame)
 
     async def _speak(self, text: str, language: Language) -> int:
         """Synthesize + play one chunk; returns its duration in ms."""

@@ -14,9 +14,10 @@ Design principles:
 
 from __future__ import annotations
 
+import asyncio
 import math
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from enum import StrEnum
@@ -47,6 +48,8 @@ _LOG = get_logger("cortex-voice.session")
 
 # Similarity threshold for the fuzzy wake-name match on the first word.
 _WAKE_FUZZY_RATIO = 0.6
+# Sustained-speech threshold before firing the barge-in hook (filters clicks).
+_BARGE_IN_AFTER_MS = 200
 
 
 class VoiceSessionState(StrEnum):
@@ -89,12 +92,19 @@ class VoiceSession:
     wake_word: WakeWordPort | None = None
     config: VoiceSessionConfig = field(default_factory=VoiceSessionConfig)
     session_id: SessionId = field(default_factory=new_session_id)
+    # Barge-in hook: awaited once per utterance after ~200 ms of sustained
+    # speech — the runner wires it to TtsSpeaker.interrupt so the robot stops
+    # talking the moment the user talks over it.
+    on_user_speech: Callable[[], Awaitable[None]] | None = None
     _state: VoiceSessionState = field(default=VoiceSessionState.IDLE, init=False)
     _speech_buffer: bytearray = field(default_factory=bytearray, init=False)
     _speech_ms: int = field(default=0, init=False)
     _silence_ms: int = field(default=0, init=False)
     _armed_grace_ms: int = field(default=0, init=False)
     _current_utterance_id: UtteranceId | None = field(default=None, init=False)
+    _interrupt_fired: bool = field(default=False, init=False)
+    _decode_tasks: set[asyncio.Task[None]] = field(default_factory=set, init=False)
+    _decode_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
 
     def __post_init__(self) -> None:
         if not self.config.require_wake_word:
@@ -119,6 +129,9 @@ class VoiceSession:
             and last_frame is not None
         ):
             await self._finalize(last_frame.format.sample_rate_hz)
+        # Decodes run in the background; let them land before the session ends.
+        if self._decode_tasks:
+            await asyncio.gather(*self._decode_tasks, return_exceptions=True)
 
     async def _handle(self, frame: AudioFrame) -> None:
         frame_ms = len(frame.pcm) * 1000 // frame.format.bytes_per_second
@@ -160,6 +173,7 @@ class VoiceSession:
             self._speech_ms = 0
             self._silence_ms = 0
             self._speech_buffer.clear()
+            self._interrupt_fired = False
             await self._publish_speech_detected(
                 start_ms=self._speech_ms,
                 end_ms=self._speech_ms + frame_ms,
@@ -168,6 +182,14 @@ class VoiceSession:
         self._speech_buffer.extend(frame.pcm)
         self._speech_ms += frame_ms
         self._silence_ms = 0
+        # Barge-in: sustained speech (not a click) → cut the robot off once.
+        if (
+            not self._interrupt_fired
+            and self.on_user_speech is not None
+            and self._speech_ms >= _BARGE_IN_AFTER_MS
+        ):
+            self._interrupt_fired = True
+            await self.on_user_speech()
         if self._speech_ms >= self.config.max_utterance_ms:
             await self._finalize(frame.format.sample_rate_hz)
 
@@ -192,40 +214,65 @@ class VoiceSession:
             self._speech_buffer.clear()
 
     async def _finalize(self, sample_rate_hz: int) -> None:
-        self._state = VoiceSessionState.DECODING
+        """Snapshot the utterance and decode it in a BACKGROUND task.
+
+        Awaiting whisper inline froze the mic loop for the whole decode
+        (~2-3 s): arecord's pipe backed up, audio spoken meanwhile was lost
+        and the mic appeared to "cut out". Continuous listening (Alice-style)
+        means the frame loop returns to IDLE immediately and keeps consuming
+        while decoding runs concurrently (serialized by `_decode_lock` so
+        parallel whisper calls don't thrash the CPU).
+        """
         utterance_id = self._current_utterance_id or new_utterance_id()
         payload = bytes(self._speech_buffer)
         self._speech_buffer.clear()
-        transcription = await self.asr.transcribe_batch(
-            payload,
-            sample_rate_hz=sample_rate_hz,
-            language_hint=self.config.language_hint,
-        )
-        text = self._gate_by_name(transcription.text)
-        _LOG.info(
-            "voice.utterance",
-            heard=transcription.text,
-            forwarded=text,
-            gated_out=text is None,
-        )
-        if text is not None:
-            await self.bus.publish(
-                AsrFinal(
-                    meta=EventMetadata(
-                        correlation_id=new_correlation_id(),
-                        producer=self.config.producer,
-                    ),
-                    session_id=self.session_id,
-                    utterance_id=utterance_id,
-                    text=text,
-                    language=transcription.language,
-                    confidence=transcription.confidence,
-                )
-            )
         self._state = VoiceSessionState.IDLE
         self._current_utterance_id = None
         self._speech_ms = 0
         self._silence_ms = 0
+        task = asyncio.create_task(
+            self._decode_and_publish(payload, sample_rate_hz, utterance_id),
+            name=f"voice-decode[{utterance_id}]",
+        )
+        self._decode_tasks.add(task)
+        task.add_done_callback(self._decode_tasks.discard)
+
+    async def _decode_and_publish(
+        self,
+        payload: bytes,
+        sample_rate_hz: int,
+        utterance_id: UtteranceId,
+    ) -> None:
+        try:
+            async with self._decode_lock:
+                transcription = await self.asr.transcribe_batch(
+                    payload,
+                    sample_rate_hz=sample_rate_hz,
+                    language_hint=self.config.language_hint,
+                )
+            text = self._gate_by_name(transcription.text)
+            _LOG.info(
+                "voice.utterance",
+                heard=transcription.text,
+                forwarded=text,
+                gated_out=text is None,
+            )
+            if text is not None:
+                await self.bus.publish(
+                    AsrFinal(
+                        meta=EventMetadata(
+                            correlation_id=new_correlation_id(),
+                            producer=self.config.producer,
+                        ),
+                        session_id=self.session_id,
+                        utterance_id=utterance_id,
+                        text=text,
+                        language=transcription.language,
+                        confidence=transcription.confidence,
+                    )
+                )
+        except Exception:
+            _LOG.exception("voice.decode_failed")
 
     def _gate_by_name(self, text: str) -> str | None:
         """Name gate: None if the wake name wasn't spoken, else the request text

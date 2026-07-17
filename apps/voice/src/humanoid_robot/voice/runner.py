@@ -58,14 +58,6 @@ class VoiceRunner:
         self._stop.set()
 
     async def run(self) -> None:
-        session = VoiceSession(
-            vad=self.vad,
-            asr=self.asr,
-            bus=self.bus,
-            wake_word=self.wake_word,
-            config=self.config,
-            session_id=self.session_id,
-        )
         speaker = TtsSpeaker(
             tts=self.tts,
             audio_out=self.audio_out,
@@ -73,6 +65,16 @@ class VoiceRunner:
             session_id=self.session_id,
             producer=self.config.producer,
             speak_all=self.speak_all,
+        )
+        session = VoiceSession(
+            vad=self.vad,
+            asr=self.asr,
+            bus=self.bus,
+            wake_word=self.wake_word,
+            config=self.config,
+            session_id=self.session_id,
+            # Barge-in: user speech cuts the robot's speech off immediately.
+            on_user_speech=speaker.interrupt,
         )
         self._tts_sub = await speaker.start()
         _LOG.info("voice_runner.ready", session_id=self.session_id)
