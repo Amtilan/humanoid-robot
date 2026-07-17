@@ -35,6 +35,11 @@ _G1_CHANNELS = 1
 _G1_SAMPLE_WIDTH_BYTES = 2
 _CHUNK_MS = 50
 _CHUNK_BYTES = _G1_SAMPLE_RATE * _G1_CHANNELS * _G1_SAMPLE_WIDTH_BYTES * _CHUNK_MS // 1000  # 1600
+# Lead buffer primed at the start of an utterance: the first ~200 ms of chunks
+# are sent back-to-back to fill the vendor speaker's buffer before pacing
+# engages, so asyncio scheduling jitter can't underrun it mid-word. Must stay
+# under the 0.5 s idle-reset threshold in `_pace_wait_for_next_slot`.
+_LEAD_S = 0.2
 _G1_FORMAT = AudioFormat(
     sample_rate_hz=_G1_SAMPLE_RATE,
     channels=_G1_CHANNELS,
@@ -109,6 +114,12 @@ class UnitreeG1AudioOut:
                 client = self._ensure_client()
             except UnitreeSdkNotAvailableError as exc:
                 raise AudioFormatMismatchError(f"SDK unavailable: {exc}") from exc
+            # At the start of an utterance (not mid-stream) put the send clock
+            # slightly in the past so the first _LEAD_S of chunks flush without
+            # waiting, priming the vendor buffer before realtime pacing kicks in.
+            now = time.monotonic()
+            if self._next_send_monotonic <= now:
+                self._next_send_monotonic = now - _LEAD_S
             for offset in range(0, len(pcm), _CHUNK_BYTES):
                 chunk = pcm[offset : offset + _CHUNK_BYTES]
                 await self._pace_wait_for_next_slot()

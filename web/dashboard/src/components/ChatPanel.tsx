@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Send, Bot, User } from "lucide-react";
+import { Send, Bot, User, Volume2 } from "lucide-react";
 
+import { api } from "../api/client";
 import { cn } from "../lib/cn";
+import { useToast } from "../lib/toast";
 import type { ChatMessage, Conversation } from "../lib/useConversation";
 import { PushToTalk } from "./PushToTalk";
 
@@ -15,6 +17,7 @@ interface Props {
 /** Chat transcript + composer, driven by a shared `useConversation`. */
 export function ChatPanel({ conversation, language, voice = true, className }: Props) {
   const { messages, pending, send } = conversation;
+  const { push } = useToast();
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -27,6 +30,16 @@ export function ChatPanel({ conversation, language, voice = true, className }: P
     const text = draft;
     setDraft("");
     void send(text, language);
+  };
+
+  // Speak the typed text verbatim through the robot's speaker (no LLM).
+  const sayVerbatim = () => {
+    const text = draft.trim();
+    if (!text) return;
+    setDraft("");
+    api.voiceSay({ text, language }).catch((err) =>
+      push({ kind: "error", title: "Не удалось озвучить", description: String(err) }),
+    );
   };
 
   return (
@@ -55,9 +68,19 @@ export function ChatPanel({ conversation, language, voice = true, className }: P
           className="flex-1 rounded-full border border-border bg-background/60 px-4 py-2 text-sm outline-none focus:border-primary"
         />
         <button
+          type="button"
+          onClick={sayVerbatim}
+          disabled={draft.trim().length === 0}
+          title="Робот произнесёт этот текст вслух"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border text-foreground disabled:opacity-40"
+        >
+          <Volume2 className="h-4 w-4" />
+        </button>
+        <button
           type="submit"
           disabled={draft.trim().length === 0 || pending}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"
+          title="Спросить робота (ответит сам)"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"
         >
           <Send className="h-4 w-4" />
         </button>

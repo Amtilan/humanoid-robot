@@ -302,6 +302,9 @@ export const api = {
   ragAsk: (body: RagAskRequest) => postJson<RagAskResponse, RagAskRequest>("/api/v1/rag/ask", body),
   ragAskStart: (body: RagAskRequest) =>
     postJson<{ session_id: string }, RagAskRequest>("/api/v1/rag/ask/start", body),
+  // Make the robot speak the given text verbatim (no LLM) out of its speaker.
+  voiceSay: (body: { text: string; language?: "ru" | "en" }) =>
+    postJson<{ session_id: string }, typeof body>("/api/v1/voice/say", body),
   settings: () => getJson<SettingsResponse>("/api/v1/settings/"),
   knowledgeStatus: () => getJson<KnowledgeStatusResponse>("/api/v1/knowledge/status"),
   deleteKnowledgeSource: (sourceId: string) =>

@@ -61,11 +61,18 @@ class TtsSpeaker:
         await self._publish_started(utterance_id)
         duration_ms = 0
         try:
-            async for frame in self.tts.synthesize_stream(
+            # Synthesize the WHOLE utterance before playing, then hand it to the
+            # speaker in one shot. Streaming synthesize→play choppily starved
+            # the vendor buffer whenever piper's per-sentence synthesis lagged
+            # the 50 ms/chunk playback pace (the "voice tears" symptom). Piper
+            # is far faster than realtime for short replies, so full synthesis
+            # costs a little latency up front for gap-free audio.
+            frame = await self.tts.synthesize(
                 TtsRequest(text=event.text, language=self._language_for_event(event))
-            ):
+            )
+            if frame.pcm:
                 await self.audio_out.play(frame)
-                duration_ms += _frame_ms(frame)
+                duration_ms = _frame_ms(frame)
         finally:
             await self._publish_finished(utterance_id, duration_ms)
 

@@ -70,7 +70,9 @@ class TestTtsSpeaker:
         await speaker.start()
         await bus.publish(_mk_llm_answer(session_id, "Привет"))
 
-        assert audio_out.played == [b"\x00\x01" * 800, b"\x02\x03" * 800]
+        # The speaker synthesizes the whole utterance in one shot (gap-free
+        # playback), so the audio arrives as a single joined frame.
+        assert audio_out.played == [b"\x00\x01" * 800 + b"\x02\x03" * 800]
         subjects = [type(ev).subject for ev in bus.published]
         assert "tts.synth.started" in subjects
         assert "tts.synth.finished" in subjects
