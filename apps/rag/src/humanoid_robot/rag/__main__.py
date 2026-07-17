@@ -23,6 +23,16 @@ def _build_orchestrator(composition: RagComposition) -> QaOrchestrator:
     """Pick the conversational or grounded orchestrator from settings.mode."""
     s = composition.settings
     if s.mode == "conversation":
+        # Only override the persona prompts when configured; otherwise keep the
+        # ConversationConfig code defaults (the "Слуга" robot persona).
+        prompt_overrides = {
+            k: v
+            for k, v in (
+                ("system_prompt_ru", s.conversation.system_prompt_ru),
+                ("system_prompt_en", s.conversation.system_prompt_en),
+            )
+            if v
+        }
         return ConversationOrchestrator(
             vector_store=composition.vector_store,
             reranker=composition.reranker,
@@ -34,6 +44,7 @@ def _build_orchestrator(composition: RagComposition) -> QaOrchestrator:
                 min_context_score=s.conversation.min_context_score,
                 temperature=s.conversation.temperature,
                 max_tokens=s.conversation.max_tokens,
+                **prompt_overrides,
             ),
         )
     return GroundedQAOrchestrator(

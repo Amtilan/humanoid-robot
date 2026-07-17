@@ -18,6 +18,7 @@ import math
 import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -43,6 +44,9 @@ from humanoid_robot.ports import (
 )
 
 _LOG = get_logger("cortex-voice.session")
+
+# Similarity threshold for the fuzzy wake-name match on the first word.
+_WAKE_FUZZY_RATIO = 0.6
 
 
 class VoiceSessionState(StrEnum):
@@ -225,15 +229,31 @@ class VoiceSession:
 
     def _gate_by_name(self, text: str) -> str | None:
         """Name gate: None if the wake name wasn't spoken, else the request text
-        with a leading "Name," stripped. No-op (returns text) when unset."""
+        with a leading "Name," stripped. No-op (returns text) when unset.
+
+        Matches the wake name's stem exactly OR fuzzily against the first word
+        (the ASR sometimes mangles the leading wake word); the fuzzy pass keeps
+        near-misses like "слуги"/"слуга" working without letting arbitrary
+        speech through.
+        """
         name = self.config.wake_name
         if not name:
             return text
         stem = name.lower()[:4]
-        if stem not in text.lower():
+        lower = text.lower()
+        matched = stem in lower
+        if not matched:
+            first = re.sub(r"^[\W_]+", "", lower).split(" ", 1)[0] if lower.strip() else ""
+            if first and SequenceMatcher(None, first, name.lower()).ratio() >= _WAKE_FUZZY_RATIO:
+                matched = True
+        if not matched:
             return None
         stripped = re.sub(
-            rf"^\s*{re.escape(stem)}\w*[\s,.!?:—-]*", "", text, count=1, flags=re.IGNORECASE
+            rf"^\s*\W*(?:{re.escape(stem)}\w*|\w+)\W*[\s,.!?:—-]*",
+            "",
+            text,
+            count=1,
+            flags=re.IGNORECASE,
         )
         return stripped.strip() or text
 

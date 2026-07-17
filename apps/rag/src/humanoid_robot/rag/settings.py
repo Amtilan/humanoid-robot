@@ -56,6 +56,11 @@ class ConversationSettings(BaseModel):
     min_context_score: float = 0.30
     temperature: float = 0.7
     max_tokens: int = 512
+    # Persona / system prompt overrides. When unset, the ConversationConfig
+    # code defaults (the "Слуга" robot persona) apply. Set these to make the
+    # robot answer as any character you like.
+    system_prompt_ru: str | None = None
+    system_prompt_en: str | None = None
 
 
 class RagRunnerSettings(BaseSettings):

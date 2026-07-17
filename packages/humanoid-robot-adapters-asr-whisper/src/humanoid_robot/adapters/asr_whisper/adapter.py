@@ -49,6 +49,16 @@ class FasterWhisperConfig(BaseModel):
     beam_size: int = Field(default=5, ge=1, le=10)
     partial_interval_ms: int = Field(default=300, ge=100, le=2000)
     sample_rate_hz: int = 16_000
+    # Biases decoding toward these words (e.g. the wake name "Слуга", which the
+    # model otherwise mishears). Passed as faster-whisper's initial_prompt.
+    initial_prompt: str | None = None
+    # CTranslate2 intra-op threads; 0 = library default (4). The Orin NX has 8
+    # cores — raising this cuts transcription latency substantially.
+    cpu_threads: int = Field(default=0, ge=0, le=16)
+    # Conditioning on previous text makes whisper repeat/hallucinate on short
+    # noisy utterances ("Раз, два, три" x30) and costs time; off is both more
+    # robust and faster for single-utterance dialogue.
+    condition_on_previous_text: bool = True
 
 
 @dataclass(slots=True)
@@ -89,6 +99,7 @@ class FasterWhisperAsr:
             self.config.model_id,
             device=self.config.device,
             compute_type=self.config.compute_type,
+            cpu_threads=self.config.cpu_threads,
         )
         return self._model
 
@@ -120,6 +131,8 @@ class FasterWhisperAsr:
                 language=None if language is Language.UNKNOWN else language.value,
                 beam_size=self.config.beam_size,
                 vad_filter=False,
+                initial_prompt=self.config.initial_prompt,
+                condition_on_previous_text=self.config.condition_on_previous_text,
             ),
         )
         segments_list = list(segments)

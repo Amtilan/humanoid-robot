@@ -1,4 +1,13 @@
-"""Output side — subscribe to LlmAnswer, synthesize with TtsPort, play on AudioOutPort.
+"""Output side — turn LLM answers into speech on the robot speaker.
+
+Two paths:
+
+* **Streaming** (Alice-style): consume ``llm.answer.token`` deltas, cut them
+  into sentences and synthesize+play each sentence while the model is still
+  generating the rest — speech starts after the FIRST sentence. The final
+  ``llm.answer`` then only flushes the tail (no re-speaking).
+* **Batch**: an ``llm.answer`` with no preceding tokens (grounded QA, the
+  /voice/say endpoint) is spoken with a per-sentence producer pipeline.
 
 Kept separate from `VoiceSession` (input side) so each concern owns one state
 machine. The two share the same session id via the runner.
@@ -6,7 +15,9 @@ machine. The two share the same session id via the runner.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import asyncio
+import re
+from dataclasses import dataclass, field
 
 from humanoid_robot.domain.shared import (
     SessionId,
@@ -18,12 +29,14 @@ from humanoid_robot.domain.voice import Language
 from humanoid_robot.events import (
     BaseEvent,
     LlmAnswer,
+    LlmAnswerToken,
     TtsSynthesisFinished,
     TtsSynthesisStarted,
 )
 from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.observability import get_logger
 from humanoid_robot.ports import (
+    AudioFrame,
     AudioOutPort,
     EventBusPort,
     Subscription,
@@ -31,12 +44,42 @@ from humanoid_robot.ports import (
     TtsRequest,
 )
 
+# Split on sentence-final punctuation, keeping the delimiter with the sentence.
+_SENTENCE_RE = re.compile(r".+?(?:[.!?…]+(?:\s|$)|$)", re.DOTALL)
+# A COMPLETE sentence during streaming: punctuation followed by whitespace.
+# Trailing punctuation without a following space stays buffered (could be
+# "3." of "3.5"); the final-answer flush speaks whatever remains.
+_COMPLETE_SENTENCE_RE = re.compile(r"^\s*(.*?[.!?…]+)\s+(.*)$", re.DOTALL)
+# Don't let half-open token streams accumulate forever if a final answer
+# never arrives (crashed generator).
+_MAX_TRACKED_STREAMS = 8
+
 _LOG = get_logger("cortex-voice.tts")
 
 
 @dataclass(slots=True)
+class _TokenStream:
+    """Accumulated state of one in-flight streamed answer."""
+
+    utterance_id: UtteranceId
+    buffer: str = ""
+    duration_ms: int = 0
+
+
+class _MultiSub:
+    """Cancels several bus subscriptions as one handle."""
+
+    def __init__(self, subs: list[Subscription]) -> None:
+        self._subs = subs
+
+    async def cancel(self) -> None:
+        for sub in self._subs:
+            await sub.cancel()
+
+
+@dataclass(slots=True)
 class TtsSpeaker:
-    """Subscribes to `llm.answer` events and drives TTS→speaker output."""
+    """Subscribes to `llm.answer(.token)` events and drives TTS→speaker output."""
 
     tts: TtsPort
     audio_out: AudioOutPort
@@ -47,34 +90,99 @@ class TtsSpeaker:
     # text chat / browser push-to-talk answers are also spoken aloud. Useful
     # when the robot's own mic can't be used and input comes from the dashboard.
     speak_all: bool = False
+    _streams: dict[str, _TokenStream] = field(default_factory=dict)
 
     async def start(self) -> Subscription:
-        """Subscribe to `llm.answer` — returns the handle for later cancel."""
-        return await self.bus.subscribe(LlmAnswer.subject, self._on_llm_answer)
+        """Subscribe to answer + token events — returns one cancel handle."""
+        answer_sub = await self.bus.subscribe(LlmAnswer.subject, self._on_llm_answer)
+        token_sub = await self.bus.subscribe(LlmAnswerToken.subject, self._on_token)
+        return _MultiSub([answer_sub, token_sub])
+
+    def _wants(self, session_id: str) -> bool:
+        return self.speak_all or session_id == self.session_id
+
+    async def _on_token(self, event: BaseEvent) -> None:
+        if not isinstance(event, LlmAnswerToken):
+            return
+        if not self._wants(event.session_id):
+            return
+        stream = self._streams.get(event.session_id)
+        if stream is None:
+            if len(self._streams) >= _MAX_TRACKED_STREAMS:
+                self._streams.pop(next(iter(self._streams)))
+            stream = _TokenStream(utterance_id=new_utterance_id())
+            self._streams[event.session_id] = stream
+            await self._publish_started(stream.utterance_id)
+        stream.buffer += event.delta_text
+        # Speak every complete sentence accumulated so far. Handlers run
+        # sequentially per subscription, so later tokens queue up behind this
+        # playback and the sentences come out in order.
+        while True:
+            match = _COMPLETE_SENTENCE_RE.match(stream.buffer)
+            if match is None:
+                break
+            sentence, stream.buffer = match.group(1).strip(), match.group(2)
+            if sentence:
+                stream.duration_ms += await self._speak(sentence, Language.RU)
 
     async def _on_llm_answer(self, event: BaseEvent) -> None:
         if not isinstance(event, LlmAnswer):
             return
-        if not self.speak_all and event.session_id != self.session_id:
+        if not self._wants(event.session_id):
             return
+        language = self._language_for_event(event)
+        stream = self._streams.pop(event.session_id, None)
+        if stream is not None:
+            # Streamed answer: the sentences were already spoken from tokens —
+            # just flush whatever tail is still buffered.
+            duration_ms = stream.duration_ms
+            tail = stream.buffer.strip()
+            if tail:
+                duration_ms += await self._speak(tail, language)
+            await self._publish_finished(stream.utterance_id, duration_ms)
+            return
+        await self._speak_batch(event.text, language)
+
+    async def _speak_batch(self, text: str, language: Language) -> None:
+        """Speak a complete answer: per-sentence synth pipeline with a
+        one-sentence lead so audio starts after the first sentence yet stays
+        gap-free (piper synthesizes faster than realtime)."""
         utterance_id = new_utterance_id()
         await self._publish_started(utterance_id)
         duration_ms = 0
         try:
-            # Synthesize the WHOLE utterance before playing, then hand it to the
-            # speaker in one shot. Streaming synthesize→play choppily starved
-            # the vendor buffer whenever piper's per-sentence synthesis lagged
-            # the 50 ms/chunk playback pace (the "voice tears" symptom). Piper
-            # is far faster than realtime for short replies, so full synthesis
-            # costs a little latency up front for gap-free audio.
-            frame = await self.tts.synthesize(
-                TtsRequest(text=event.text, language=self._language_for_event(event))
-            )
-            if frame.pcm:
-                await self.audio_out.play(frame)
-                duration_ms = _frame_ms(frame)
+            sentences = _split_sentences(text)
+            if not sentences:
+                return
+            queue: asyncio.Queue[AudioFrame | None] = asyncio.Queue(maxsize=1)
+
+            async def _produce() -> None:
+                for sentence in sentences:
+                    frame = await self.tts.synthesize(TtsRequest(text=sentence, language=language))
+                    if frame.pcm:
+                        await queue.put(frame)
+                await queue.put(None)
+
+            producer = asyncio.create_task(_produce())
+            try:
+                while True:
+                    frame = await queue.get()
+                    if frame is None:
+                        break
+                    await self.audio_out.play(frame)
+                    duration_ms += _frame_ms(frame)
+            finally:
+                await producer
         finally:
             await self._publish_finished(utterance_id, duration_ms)
+
+    async def _speak(self, text: str, language: Language) -> int:
+        """Synthesize + play one chunk; returns its duration in ms."""
+        frame = await self.tts.synthesize(TtsRequest(text=text, language=language))
+        if not frame.pcm:
+            return 0
+        await self.audio_out.play(frame)
+        return _frame_ms(frame)
 
     def _language_for_event(self, event: LlmAnswer) -> Language:
         return getattr(event, "language", Language.RU)
@@ -113,3 +221,11 @@ def _frame_ms(frame: object) -> int:
         return 0
     bytes_per_second = int(fmt.bytes_per_second)
     return len(pcm) * 1000 // bytes_per_second
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Split into sentences so the first can be synthesized and spoken while the
+    rest are still being synthesized. Falls back to the whole text if there are
+    no sentence breaks."""
+    parts = [m.group(0).strip() for m in _SENTENCE_RE.finditer(text)]
+    return [p for p in parts if p]

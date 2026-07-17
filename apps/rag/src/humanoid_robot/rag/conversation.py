@@ -15,6 +15,7 @@ citations, so they use the `PARTIAL` grounding verdict (which — unlike
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -59,9 +60,9 @@ class ConversationConfig(BaseModel):
     system_prompt_ru: str = (
         "Тебя зовут Слуга. Ты — дружелюбный человекоподобный робот-помощник "
         "(Unitree G1). Ты живой, стоишь на ногах и общаешься голосом. К тебе "
-        "обращаются по имени — Слуга. Отвечай коротко, естественно и по-"
-        "человечески, на русском языке — это разговор вслух, так что 1–3 "
-        "предложения. Если ниже дан релевантный контекст из базы знаний, "
+        "обращаются по имени — Слуга. Это разговор вслух: отвечай ОЧЕНЬ коротко "
+        "и естественно, обычно одним-двумя предложениями, без списков и "
+        "вступлений. Если ниже дан релевантный контекст из базы знаний, "
         "используй его; если нет — просто поболтай, опираясь на свои знания. Не "
         "выдумывай конкретные факты о документах, которых тебе не давали."
     )
@@ -84,6 +85,28 @@ class ConversationOrchestrator:
     reranker: RerankerPort
     llm: LlmPort
     config: ConversationConfig = field(default_factory=ConversationConfig)
+
+    async def stream_answer(self, question: str, language: Language) -> AsyncIterator[str]:
+        """Yield answer deltas as the LLM generates them (Alice-style
+        pipelining: TTS starts speaking the first sentence while the rest is
+        still generating). Falls back to one canned sentence when the model
+        yields nothing."""
+        hits = await self._retrieve(question)
+        context = self._format_context(hits)
+        request = LlmRequest(
+            system_prompt=self._system_prompt(language),
+            user_prompt=self._render_prompt(question, context),
+            grammar_gbnf=None,
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens,
+        )
+        yielded = False
+        async for delta in self.llm.stream(request):
+            if delta:
+                yielded = True
+                yield delta
+        if not yielded:
+            yield self._fallback(language)
 
     async def answer(self, question: str, language: Language) -> GroundedQAResult:
         hits = await self._retrieve(question)
