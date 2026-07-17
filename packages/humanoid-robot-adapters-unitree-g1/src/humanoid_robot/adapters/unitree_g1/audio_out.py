@@ -123,7 +123,9 @@ class UnitreeG1AudioOut:
             for offset in range(0, len(pcm), _CHUNK_BYTES):
                 chunk = pcm[offset : offset + _CHUNK_BYTES]
                 await self._pace_wait_for_next_slot()
-                client.PlayStream(self.app_name, self._stream_id, chunk)
+                # Vendor DDS RPC — run off-loop so a hung call can't freeze the
+                # whole process (the vendor SDK is known to wedge occasionally).
+                await asyncio.to_thread(client.PlayStream, self.app_name, self._stream_id, chunk)
 
     def _to_g1_pcm(self, frame: AudioFrame) -> bytes:
         """Coerce a frame to the G1's 16 kHz mono PCM16. Sample-rate
@@ -163,7 +165,10 @@ class UnitreeG1AudioOut:
             self._resample_src_rate = 0
             if not self._initialised:
                 return
-            self._client.PlayStop(self.app_name)
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(
+                    asyncio.to_thread(self._client.PlayStop, self.app_name), timeout=5.0
+                )
             self._next_send_monotonic = time.monotonic()
 
     async def _pace_wait_for_next_slot(self) -> None:

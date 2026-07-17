@@ -150,8 +150,12 @@ class AlsaAudioIn:
             await proc.wait()
 
     async def _ensure_process(self) -> _ArecordProcess:
-        if self._process is not None:
-            return self._process
+        proc = self._process
+        if proc is not None and proc.returncode is None:
+            return proc
+        # arecord died (USB hiccup, ALSA error) — respawn instead of handing
+        # back a corpse and going permanently deaf.
+        self._process = None
         factory = self._process_factory or _DefaultArecordFactory()
         proc = await factory.spawn(self.config)
         self._process = proc

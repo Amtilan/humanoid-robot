@@ -66,21 +66,10 @@ class VoiceRunner:
             producer=self.config.producer,
             speak_all=self.speak_all,
         )
-        session = VoiceSession(
-            vad=self.vad,
-            asr=self.asr,
-            bus=self.bus,
-            wake_word=self.wake_word,
-            config=self.config,
-            session_id=self.session_id,
-            # Barge-in: a wake-named utterance cuts the robot's speech off.
-            on_user_speech=speaker.interrupt,
-            speaker_is_speaking=lambda: speaker.speaking,
-        )
         self._tts_sub = await speaker.start()
         _LOG.info("voice_runner.ready", session_id=self.session_id)
 
-        session_task = asyncio.create_task(session.run(self._mic_stream()), name="voice-session")
+        session_task = asyncio.create_task(self._session_loop(speaker), name="voice-session")
         # We wait for a stop signal, not for the session to end. Even after
         # the mic stream drains, TTS replies to previously-emitted asr.final
         # events may still be arriving; only an explicit stop tears the
@@ -99,6 +88,31 @@ class VoiceRunner:
             if self._tts_sub is not None:
                 await self._tts_sub.cancel()
             await self.audio_in.close()
+
+    async def _session_loop(self, speaker: TtsSpeaker) -> None:
+        """Run the mic session forever: if the mic stream ends or the session
+        crashes (arecord died on a USB/ALSA hiccup), recreate both after a
+        beat instead of going permanently deaf."""
+        while not self._stop.is_set():
+            session = VoiceSession(
+                vad=self.vad,
+                asr=self.asr,
+                bus=self.bus,
+                wake_word=self.wake_word,
+                config=self.config,
+                session_id=self.session_id,
+                # Barge-in: a wake-named utterance cuts the robot's speech off.
+                on_user_speech=speaker.interrupt,
+                speaker_is_speaking=lambda: speaker.speaking,
+            )
+            try:
+                await session.run(self._mic_stream())
+            except Exception:
+                _LOG.exception("voice_session.crashed")
+            if self._stop.is_set():
+                return
+            _LOG.warning("voice_session.mic_stream_ended_restarting")
+            await asyncio.sleep(1.0)
 
     async def _mic_stream(self) -> AsyncIterator[AudioFrame]:
         async for frame in self.audio_in.stream():

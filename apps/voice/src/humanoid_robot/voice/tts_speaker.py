@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import re
+import time
 from dataclasses import dataclass, field
 
 from humanoid_robot.domain.shared import (
@@ -31,6 +32,7 @@ from humanoid_robot.events import (
     BaseEvent,
     LlmAnswer,
     LlmAnswerToken,
+    LlmRejected,
     TtsSynthesisFinished,
     TtsSynthesisStarted,
 )
@@ -54,6 +56,12 @@ _COMPLETE_SENTENCE_RE = re.compile(r"^\s*(.*?[.!?…]+)\s+(.*)$", re.DOTALL)
 # Don't let half-open token streams accumulate forever if a final answer
 # never arrives (crashed generator).
 _MAX_TRACKED_STREAMS = 8
+# Hard ceiling on one synth+play chunk. A wedged piper/vendor call must not
+# block the answer queue forever — drop the chunk and move on (self-healing).
+_SPEAK_TIMEOUT_S = 30.0
+# If the speaking flag shows no progress this long, treat the speaker as idle
+# so the mic can't stay deaf behind a stuck utterance.
+_SPEAKING_STALL_S = 35.0
 
 _LOG = get_logger("cortex-voice.tts")
 
@@ -99,16 +107,32 @@ class TtsSpeaker:
     # >0 while an answer is being spoken (start..finished); exposed so the
     # session can apply "interrupt only by name while the robot talks".
     _speaking_depth: int = field(default=0)
+    _last_progress: float = field(default=0.0)
 
     @property
     def speaking(self) -> bool:
-        return self._speaking_depth > 0
+        # Stall failsafe: a wedged utterance must not keep the mic deaf.
+        return (
+            self._speaking_depth > 0
+            and (time.monotonic() - self._last_progress) < _SPEAKING_STALL_S
+        )
 
     async def start(self) -> Subscription:
-        """Subscribe to answer + token events — returns one cancel handle."""
+        """Subscribe to answer/token/rejected events — one cancel handle."""
         answer_sub = await self.bus.subscribe(LlmAnswer.subject, self._on_llm_answer)
         token_sub = await self.bus.subscribe(LlmAnswerToken.subject, self._on_token)
-        return _MultiSub([answer_sub, token_sub])
+        rejected_sub = await self.bus.subscribe(LlmRejected.subject, self._on_rejected)
+        return _MultiSub([answer_sub, token_sub, rejected_sub])
+
+    async def _on_rejected(self, event: BaseEvent) -> None:
+        """A rejected answer still has to CLOSE its token stream — otherwise the
+        speaking flag leaks and the mic stays deaf."""
+        if not isinstance(event, LlmRejected):
+            return
+        self._muted.discard(event.session_id)
+        stream = self._streams.pop(event.session_id, None)
+        if stream is not None:
+            await self._publish_finished(stream.utterance_id, stream.duration_ms)
 
     async def interrupt(self) -> None:
         """Barge-in: the user started talking — stop speaking NOW and mute the
@@ -129,13 +153,22 @@ class TtsSpeaker:
         return self.speak_all or session_id == self.session_id
 
     async def _speak_cancellable(self, text: str, language: Language) -> int:
-        """Speak one chunk in a task `interrupt()` can cancel; returns ms
-        spoken (0 when interrupted)."""
+        """Speak one chunk in a task `interrupt()` can cancel, with a hard
+        timeout so a wedged synth/vendor call can't freeze the answer queue;
+        returns ms spoken (0 when interrupted/timed out)."""
         self._current = asyncio.create_task(self._speak(text, language))
         try:
-            return await self._current
+            spoken_ms = await asyncio.wait_for(self._current, timeout=_SPEAK_TIMEOUT_S)
+        except TimeoutError:
+            _LOG.error("tts.speak_timeout", text=text[:60])
+            with contextlib.suppress(Exception):
+                await self.audio_out.stop()
+            return 0
         except asyncio.CancelledError:
             return 0
+        else:
+            self._last_progress = time.monotonic()
+            return spoken_ms
         finally:
             self._current = None
 
@@ -147,7 +180,9 @@ class TtsSpeaker:
         stream = self._streams.get(event.session_id)
         if stream is None:
             if len(self._streams) >= _MAX_TRACKED_STREAMS:
-                self._streams.pop(next(iter(self._streams)))
+                evicted = self._streams.pop(next(iter(self._streams)))
+                # Close the evicted stream properly or the speaking flag leaks.
+                await self._publish_finished(evicted.utterance_id, evicted.duration_ms)
             stream = _TokenStream(utterance_id=new_utterance_id())
             self._streams[event.session_id] = stream
             await self._publish_started(stream.utterance_id)
@@ -227,7 +262,13 @@ class TtsSpeaker:
                         break
                     self._current = asyncio.create_task(self._play_frame(frame))
                     try:
-                        duration_ms += await self._current
+                        duration_ms += await asyncio.wait_for(
+                            self._current, timeout=_SPEAK_TIMEOUT_S
+                        )
+                        self._last_progress = time.monotonic()
+                    except TimeoutError:
+                        _LOG.error("tts.play_timeout")
+                        break
                     except asyncio.CancelledError:
                         break  # barge-in — stop this answer
                     finally:
@@ -256,6 +297,7 @@ class TtsSpeaker:
 
     async def _publish_started(self, utterance_id: UtteranceId) -> None:
         self._speaking_depth += 1
+        self._last_progress = time.monotonic()
         await self.bus.publish(
             TtsSynthesisStarted(
                 meta=EventMetadata(
