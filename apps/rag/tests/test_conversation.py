@@ -134,4 +134,5 @@ async def test_retrieve_false_skips_vector_store() -> None:
     orch = _orch(store=store, config=ConversationConfig(retrieve=False))
     result = await orch.answer("привет", Language.RU)
     assert store.searched is False
+    assert result.answer is not None
     assert result.answer.answer  # still produced a chat reply
