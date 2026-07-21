@@ -23,7 +23,7 @@ def main() -> None:
         default="sim",
         help="sim = in-memory simulator; sendinput = Windows input emulation",
     )
-    parser.add_argument("--host", default="0.0.0.0")  # noqa: S104
+    parser.add_argument("--host", default="0.0.0.0")  # noqa: S104  # pragma: allowlist secret
     parser.add_argument("--port", type=int, default=8093)
     parser.add_argument(
         "--token",
