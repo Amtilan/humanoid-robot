@@ -14,6 +14,8 @@ class ServiceInfo(BaseModel):
     service: str
     version: str
     environment: str
+    # "guard" | "presenter" | "generic" — the dashboard adapts its tabs.
+    role: str = "generic"
 
 
 class HealthResponse(BaseModel):
@@ -27,6 +29,7 @@ async def get_info(request: Request) -> ServiceInfo:
         service=container.settings.service_name,
         version="0.0.0",
         environment=container.settings.environment,
+        role=container.settings.role,
     )
 
 

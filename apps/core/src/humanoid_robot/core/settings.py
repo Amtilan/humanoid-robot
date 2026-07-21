@@ -150,6 +150,13 @@ class CoreSettings(BaseSettings):
 
     environment: str = "prod"
     service_name: str = "cortex-core"
+    # Deployment role of THIS robot: drives which product surface the
+    # dashboard shows. One platform, per-robot profiles — a presenter
+    # customer never sees the guard desk and vice versa.
+    #   "guard"     — пункт охраны (visit intake, журнал посетителей)
+    #   "presenter" — робот-презентатор (видеостена)
+    #   "generic"   — full dev surface, no customer-specific tabs
+    role: str = "generic"
     http: HttpSettings = HttpSettings()
     nats: NatsSettings = NatsSettings()
     observability: ObservabilitySettings = ObservabilitySettings()

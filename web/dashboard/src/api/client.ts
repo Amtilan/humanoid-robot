@@ -131,6 +131,7 @@ export interface ServiceInfo {
   service: string;
   version: string;
   environment: string;
+  role?: "guard" | "presenter" | "generic";
 }
 
 export interface HealthResponse {
