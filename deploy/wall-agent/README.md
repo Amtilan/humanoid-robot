@@ -36,6 +36,8 @@
 На роботе указать адрес агента в `/etc/humanoid-robot/cortex-core.env`:
 
 ```
+HR_ROLE=presenter
+HR_WALL__ENABLED=true
 HR_WALL__AGENT_URL=http://<IP-ПК-стены>:8093
 HR_WALL__TOKEN=СЕКРЕТ
 ```

@@ -130,9 +130,13 @@ class WallSettings(BaseModel):
     ``agent_url`` points at the ``cortex-wall-agent`` next to the wall
     application — the compose simulator by default, the wall PC's address in
     production (``HR_WALL__AGENT_URL=http://<wall-pc>:8093``).
+
+    Off by default: only presenter-role robots enable it explicitly
+    (``HR_WALL__ENABLED=true`` in /etc/humanoid-robot/cortex-core.env), so a
+    guard-desk deployment carries no video-wall surface at all.
     """
 
-    enabled: bool = True
+    enabled: bool = False
     agent_url: str = "http://wall-agent:8093"
     token: str = ""
     timeout_s: float = 5.0
