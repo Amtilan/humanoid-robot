@@ -16,12 +16,20 @@ from humanoid_robot.rag.grounded_qa import (
     GroundedQAConfig,
     GroundedQAOrchestrator,
 )
+from humanoid_robot.rag.guard_kb import GuardKb
 from humanoid_robot.rag.llm_config_sync import LlmConfigSync
 from humanoid_robot.rag.runner import QaOrchestrator, RagRunner
 from humanoid_robot.rag.settings import RagRunnerSettings, load_settings
 
 
-def _build_orchestrator(composition: RagComposition) -> QaOrchestrator:
+def _load_guard_kb(s: RagRunnerSettings) -> GuardKb | None:
+    """Customer reference data, only in guard mode."""
+    if not s.guard.intake_enabled:
+        return None
+    return GuardKb.load(s.guard.kb_path)
+
+
+def _build_orchestrator(composition: RagComposition, kb: GuardKb | None) -> QaOrchestrator:
     """Pick the conversational or grounded orchestrator from settings.mode."""
     s = composition.settings
     if s.mode == "conversation":
@@ -35,6 +43,13 @@ def _build_orchestrator(composition: RagComposition) -> QaOrchestrator:
             )
             if v
         }
+        if kb is not None and not kb.empty:
+            # The customer's справка rides inside the persona so the LLM
+            # consults ONLY approved materials.
+            base_ru = prompt_overrides.get(
+                "system_prompt_ru", ConversationConfig().system_prompt_ru
+            )
+            prompt_overrides["system_prompt_ru"] = base_ru + "\n" + kb.reference_block()
         return ConversationOrchestrator(
             vector_store=composition.vector_store,
             reranker=composition.reranker,
@@ -99,13 +114,15 @@ def run(
 async def _serve(settings: RagRunnerSettings) -> None:
     log = get_logger("cortex-rag.runner")
     composition = await RagComposition.build(settings)
-    orch = _build_orchestrator(composition)
+    guard_kb = _load_guard_kb(settings)
+    orch = _build_orchestrator(composition, guard_kb)
     log.info("cortex-rag.mode", mode=composition.settings.mode)
     runner = RagRunner(
         orchestrator=orch,
         bus=composition.bus,
         producer=composition.settings.service_name,
         guard_intake_enabled=composition.settings.guard.intake_enabled,
+        guard_kb=guard_kb,
     )
     # Live local⇄cloud LLM switching from the app; the yaml values are the
     # local baseline to fall back to.

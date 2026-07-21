@@ -14,21 +14,9 @@ const CHAT_SUBJECTS = new Set([
 ]);
 const isChatSubject = (subject: string) => CHAT_SUBJECTS.has(subject);
 
-// Chat log survives page reloads.
-const STORAGE_KEY = "humanoid-robot.chat.history";
-const STORAGE_MAX_MESSAGES = 60;
-
-function loadStored(): ChatMessage[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as ChatMessage[];
-    // Anything mid-stream at reload time is finished as-is.
-    return parsed.map((m) => (m.status === "streaming" ? { ...m, status: "done" } : m));
-  } catch {
-    return [];
-  }
-}
+// The full history is persisted ON THE ROBOT (core dialogue journal) and
+// fetched on mount — reloads, other devices and robot reboots all keep the
+// same conversation. localStorage is no longer used.
 
 export type ChatRole = "user" | "assistant";
 export type ChatStatus = "streaming" | "done" | "rejected";
@@ -60,20 +48,45 @@ const nextId = () => `m${Date.now().toString(36)}-${(counter += 1)}`;
  * assistant bubble.
  */
 export function useConversation(): Conversation {
-  const [messages, setMessages] = useState<ChatMessage[]>(loadStored);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // session_id -> assistant message id, so streamed tokens find their bubble.
   const routeRef = useRef(new Map<string, string>());
 
-  // Persist the log (capped) so a reload doesn't lose the conversation.
+  // Seed the chat from the robot's persisted journal once on mount; keep
+  // whatever streamed in live before the fetch resolved.
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-STORAGE_MAX_MESSAGES)));
-    } catch {
-      // storage may be full/blocked — the in-memory log still works
-    }
-  }, [messages]);
+    let cancelled = false;
+    api
+      .dialogueHistory()
+      .then(({ records }) => {
+        if (cancelled) return;
+        const server: ChatMessage[] = records.map((r) => ({
+          id: `srv-${r.id}`,
+          role: r.role,
+          text: r.text,
+          status: r.status === "rejected" ? "rejected" : "done",
+          sessionId: r.session_id,
+        }));
+        setMessages((prev) => {
+          const live = prev.filter((m) => !m.id.startsWith("srv-"));
+          // Drop live messages already present in the server tail (they were
+          // journaled while we were fetching).
+          const tail = new Set(server.slice(-20).map((m) => `${m.role}:${m.text}`));
+          const fresh = live.filter(
+            (m) => m.status === "streaming" || !tail.has(`${m.role}:${m.text}`),
+          );
+          return [...server, ...fresh];
+        });
+      })
+      .catch(() => {
+        // Robot unreachable — the live-only log still works.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const patch = useCallback((id: string, fn: (m: ChatMessage) => ChatMessage) => {
     setMessages((prev) => prev.map((m) => (m.id === id ? fn(m) : m)));
@@ -170,11 +183,11 @@ export function useConversation(): Conversation {
     setMessages([]);
     setError(null);
     setPending(false);
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // ignore
-    }
+    // Also wipe the robot-side journal, so the history stays cleared after
+    // the next reload.
+    api.dialogueClear().catch(() => {
+      // If the robot is unreachable the local clear still applies.
+    });
   }, []);
 
   return { messages, pending, error, send, clear };

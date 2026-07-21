@@ -16,6 +16,7 @@ from prometheus_client import CollectorRegistry
 
 from humanoid_robot.adapters.nats import NatsEventBus, NatsEventBusConfig
 from humanoid_robot.core.diagnostics_ticker import DiagnosticsTicker
+from humanoid_robot.core.dialogue_journal import DialogueJournal
 from humanoid_robot.core.knowledge_service import KnowledgeService
 from humanoid_robot.core.plugin_manager import PluginManager
 from humanoid_robot.core.robot_manifest_cache import RobotManifestCache
@@ -70,6 +71,7 @@ class AppContainer:
     robot_telemetry_cache: RobotTelemetryCache = field(default_factory=RobotTelemetryCache)
     _manifest_subscription: Subscription | None = field(default=None)
     _visit_subscription: Subscription | None = field(default=None)
+    _dialogue_subscriptions: list[Subscription] = field(default_factory=list)
     _telemetry_subscription: Subscription | None = field(default=None)
 
     @classmethod
@@ -103,6 +105,9 @@ class AppContainer:
 
         # Guard-desk visit journal: persists visit.card.completed to SQLite.
         visit_subscription = await VisitJournal().start(bus)
+
+        # Full conversation history for the dashboard (survives reloads).
+        dialogue_subscriptions = await DialogueJournal().start(bus)
 
         diagnostics_ticker = DiagnosticsTicker(bus=bus)
         await diagnostics_ticker.start()
@@ -197,6 +202,7 @@ class AppContainer:
             _manifest_subscription=manifest_subscription,
             _telemetry_subscription=telemetry_subscription,
             _visit_subscription=visit_subscription,
+            _dialogue_subscriptions=dialogue_subscriptions,
         )
 
     async def close(self) -> None:
@@ -241,6 +247,10 @@ class AppContainer:
             with contextlib.suppress(Exception):
                 await self._visit_subscription.cancel()
             self._visit_subscription = None
+        for sub in self._dialogue_subscriptions:
+            with contextlib.suppress(Exception):
+                await sub.cancel()
+        self._dialogue_subscriptions = []
         if self._telemetry_subscription is not None:
             with contextlib.suppress(Exception):
                 await self._telemetry_subscription.cancel()

@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from humanoid_robot.core.api.adapters import router as adapters_router
+from humanoid_robot.core.api.dialogue import router as dialogue_router
 from humanoid_robot.core.api.diagnostics import router as diagnostics_router
 from humanoid_robot.core.api.events import router as events_router
 from humanoid_robot.core.api.knowledge import router as knowledge_router
@@ -25,6 +26,7 @@ router.include_router(robot_router, prefix="/robot", tags=["robot"])
 router.include_router(rag_router, prefix="/rag", tags=["rag"])
 router.include_router(voice_router, prefix="/voice", tags=["voice"])
 router.include_router(visits_router, prefix="/visits", tags=["visits"])
+router.include_router(dialogue_router, prefix="/dialogue", tags=["dialogue"])
 router.include_router(llm_router, prefix="/llm", tags=["llm"])
 router.include_router(knowledge_router, prefix="/knowledge", tags=["knowledge"])
 router.include_router(diagnostics_router, prefix="/diagnostics", tags=["diagnostics"])

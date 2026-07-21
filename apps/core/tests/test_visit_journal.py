@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 import pytest
 
 from humanoid_robot.domain.shared import new_correlation_id
@@ -10,15 +13,15 @@ from humanoid_robot.events.base import EventMetadata
 
 
 @pytest.fixture
-def journal(tmp_path, monkeypatch):
+def journal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setenv("HR_VISITS_DB", str(tmp_path / "visits.db"))
     import humanoid_robot.core.visit_journal as vj
 
     return vj
 
 
-def _card(**overrides):
-    fields = {
+def _card(**overrides: Any) -> VisitCardCompleted:
+    fields: dict[str, Any] = {
         "full_name": "Иванов Иван",
         "organization": "ТОО Тест",
         "purpose": "Встреча",
@@ -33,7 +36,7 @@ def _card(**overrides):
     )
 
 
-def test_insert_and_list(journal) -> None:
+def test_insert_and_list(journal: Any) -> None:
     visit_id = journal.insert_visit_sync(_card())
     assert visit_id >= 1
     records = journal.list_visits_sync()
@@ -45,7 +48,7 @@ def test_insert_and_list(journal) -> None:
     assert rec["status"] == "new"
 
 
-def test_mark_processed_and_filter(journal) -> None:
+def test_mark_processed_and_filter(journal: Any) -> None:
     first = journal.insert_visit_sync(_card(full_name="Первый"))
     journal.insert_visit_sync(_card(full_name="Второй"))
     assert journal.mark_processed_sync(first) is True
@@ -56,7 +59,7 @@ def test_mark_processed_and_filter(journal) -> None:
     assert [r["full_name"] for r in processed] == ["Первый"]
 
 
-def test_newest_first_ordering(journal) -> None:
+def test_newest_first_ordering(journal: Any) -> None:
     for name in ("А", "Б", "В"):
         journal.insert_visit_sync(_card(full_name=name))
     records = journal.list_visits_sync(limit=2)

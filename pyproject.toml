@@ -133,9 +133,11 @@ ignore = [
 "apps/rag/src/humanoid_robot/rag/llm_config_sync.py" = ["ANN401"]
 # Russian spoken-dialogue strings for the guard-desk interview.
 "apps/rag/src/humanoid_robot/rag/visit_intake.py" = ["RUF001", "RUF002", "RUF003"]
+"apps/rag/src/humanoid_robot/rag/guard_kb.py" = ["RUF001", "RUF002", "RUF003"]
 "apps/rag/src/humanoid_robot/rag/runner.py" = ["RUF003"]
 "apps/rag/tests/test_visit_intake.py" = ["RUF001"]
 "apps/rag/tests/test_runner_guard.py" = ["RUF001"]
+"apps/rag/tests/test_guard_kb.py" = ["RUF001"]
 "apps/core/tests/test_visit_journal.py" = ["RUF001"]
 "packages/humanoid-robot-adapters-wakeword-openwakeword/src/humanoid_robot/adapters/wakeword_openwakeword/adapter.py" = ["ANN401"]
 "apps/voice/src/humanoid_robot/voice/__main__.py" = ["B008"]

@@ -219,6 +219,15 @@ export interface SettingsResponse {
   settings: Record<string, unknown>;
 }
 
+export interface DialogueRecord {
+  id: number;
+  created_at: string;
+  session_id: string;
+  role: "user" | "assistant";
+  text: string;
+  status: "done" | "rejected";
+}
+
 export interface VisitRecord {
   id: number;
   created_at: string;
@@ -333,6 +342,10 @@ export const api = {
   voiceInterrupt: () => postJson<{ interrupted: boolean }>("/api/v1/voice/interrupt"),
   // LLM backend switching (local llama.cpp ⇄ cloud OpenAI-compatible). The
   // api key is stored on the robot (core-state volume), never in images.
+  // Full conversation history persisted on the robot (voice + chat).
+  dialogueHistory: (limit = 200) =>
+    getJson<{ records: DialogueRecord[] }>(`/api/v1/dialogue?limit=${limit}`),
+  dialogueClear: () => deleteJson<{ deleted: number }>("/api/v1/dialogue"),
   // Guard desk (пункт охраны): visitor journal + starting the interview.
   visitsList: (status?: "new" | "processed") =>
     getJson<{ records: VisitRecord[] }>(

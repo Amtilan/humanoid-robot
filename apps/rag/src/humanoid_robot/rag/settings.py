@@ -69,6 +69,8 @@ class GuardSettings(BaseModel):
     # When true, «оформите визит»-style phrases (or visit.intake.start from
     # the guard panel) run the sequential visitor interview.
     intake_enabled: bool = False
+    # Customer reference data (rooms, FAQ, справка) for consultations.
+    kb_path: str = "/etc/humanoid-robot/guard-kb.yaml"
 
 
 class RagRunnerSettings(BaseSettings):

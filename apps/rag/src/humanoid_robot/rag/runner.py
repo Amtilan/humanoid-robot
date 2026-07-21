@@ -33,6 +33,7 @@ from humanoid_robot.observability import get_logger
 from humanoid_robot.ports import EventBusPort, Subscription
 from humanoid_robot.rag.conversation import trim_incomplete_tail
 from humanoid_robot.rag.grounded_qa import GroundedQAResult
+from humanoid_robot.rag.guard_kb import GuardKb
 from humanoid_robot.rag.visit_intake import VisitIntake, wants_intake
 
 _LOG = get_logger("cortex-rag.runner")
@@ -64,6 +65,8 @@ class RagRunner:
     # visit.intake.start event from the guard panel) run the deterministic
     # visitor interview instead of free chat.
     guard_intake_enabled: bool = False
+    # Customer reference data; room/unit navigation answers are deterministic.
+    guard_kb: GuardKb | None = None
     _intake: VisitIntake = field(default_factory=VisitIntake)
     _stop: asyncio.Event = field(default_factory=asyncio.Event)
     _subscription: Subscription | None = None
@@ -157,6 +160,12 @@ class RagRunner:
                     session_id=event.session_id, text=self._intake.start()
                 )
                 return
+            if self.guard_kb is not None:
+                answer = self.guard_kb.lookup(event.text)
+                if answer is not None:
+                    _LOG.info("guard_kb.navigation_answer", text=event.text[:60])
+                    await self._publish_answer_text(session_id=event.session_id, text=answer)
+                    return
         # Prefer the streaming path when the orchestrator supports it: tokens
         # go out as llm.answer.token so TTS/dashboards can start on the first
         # sentence while the model is still generating (the final llm.answer
