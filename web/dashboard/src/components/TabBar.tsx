@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Activity, Hand, Home, Menu } from "lucide-react";
+import { Activity, Hand, Home, Menu, Shield } from "lucide-react";
 
 import { cn } from "../lib/cn";
 
@@ -7,13 +7,14 @@ const tabs = [
   { to: "/", label: "Главная", icon: Home },
   { to: "/motions", label: "Движения", icon: Hand },
   { to: "/status", label: "Состояние", icon: Activity },
+  { to: "/guard", label: "Охрана", icon: Shield },
   { to: "/more", label: "Ещё", icon: Menu },
 ];
 
 /** Bottom tab bar for the owner-facing screens (app-like on every viewport). */
 export function TabBar() {
   return (
-    <nav className="grid shrink-0 grid-cols-4 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
+    <nav className="grid shrink-0 grid-cols-5 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
       {tabs.map(({ to, label, icon: Icon }) => (
         <NavLink
           key={to}

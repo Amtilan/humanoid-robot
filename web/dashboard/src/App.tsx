@@ -25,6 +25,7 @@ import { EventsPage } from "./pages/EventsPage";
 import { HomePage } from "./pages/HomePage";
 import { KnowledgePage } from "./pages/KnowledgePage";
 import { MorePage } from "./pages/MorePage";
+import { GuardPage } from "./pages/GuardPage";
 import { MotionsPage } from "./pages/MotionsPage";
 import { PluginsPage } from "./pages/PluginsPage";
 import { QaPage } from "./pages/QaPage";
@@ -141,6 +142,7 @@ export function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/motions" element={<MotionsPage />} />
         <Route path="/status" element={<StatusPage />} />
+        <Route path="/guard" element={<GuardPage />} />
         <Route path="/more" element={<MorePage />} />
       </Route>
       <Route element={<ConsoleLayout />}>

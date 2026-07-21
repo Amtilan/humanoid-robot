@@ -105,6 +105,7 @@ async def _serve(settings: RagRunnerSettings) -> None:
         orchestrator=orch,
         bus=composition.bus,
         producer=composition.settings.service_name,
+        guard_intake_enabled=composition.settings.guard.intake_enabled,
     )
     # Live local⇄cloud LLM switching from the app; the yaml values are the
     # local baseline to fall back to.

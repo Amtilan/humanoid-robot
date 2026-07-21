@@ -63,6 +63,14 @@ class ConversationSettings(BaseModel):
     system_prompt_en: str | None = None
 
 
+class GuardSettings(BaseModel):
+    """Security-desk (пункт охраны) mode."""
+
+    # When true, «оформите визит»-style phrases (or visit.intake.start from
+    # the guard panel) run the sequential visitor interview.
+    intake_enabled: bool = False
+
+
 class RagRunnerSettings(BaseSettings):
     """Top-level RAG configuration."""
 
@@ -83,6 +91,7 @@ class RagRunnerSettings(BaseSettings):
     nats: NatsSettings = NatsSettings()
     qa: QaSettings = QaSettings()
     conversation: ConversationSettings = ConversationSettings()
+    guard: GuardSettings = GuardSettings()
     stack: RagStackSettings
 
     @classmethod

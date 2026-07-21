@@ -19,12 +19,21 @@ from typing import Protocol
 from humanoid_robot.domain.knowledge import Citation, GroundedAnswer
 from humanoid_robot.domain.shared import new_correlation_id
 from humanoid_robot.domain.voice import Language
-from humanoid_robot.events import AsrFinal, BaseEvent, LlmAnswer, LlmAnswerToken, LlmRejected
+from humanoid_robot.events import (
+    AsrFinal,
+    BaseEvent,
+    LlmAnswer,
+    LlmAnswerToken,
+    LlmRejected,
+    VisitCardCompleted,
+    VisitIntakeStart,
+)
 from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.observability import get_logger
 from humanoid_robot.ports import EventBusPort, Subscription
 from humanoid_robot.rag.conversation import trim_incomplete_tail
 from humanoid_robot.rag.grounded_qa import GroundedQAResult
+from humanoid_robot.rag.visit_intake import VisitIntake, wants_intake
 
 _LOG = get_logger("cortex-rag.runner")
 
@@ -51,8 +60,14 @@ class RagRunner:
     orchestrator: QaOrchestrator
     bus: EventBusPort
     producer: str = "cortex-rag"
+    # Security-desk mode: when enabled, «оформите визит»-style phrases (or a
+    # visit.intake.start event from the guard panel) run the deterministic
+    # visitor interview instead of free chat.
+    guard_intake_enabled: bool = False
+    _intake: VisitIntake = field(default_factory=VisitIntake)
     _stop: asyncio.Event = field(default_factory=asyncio.Event)
     _subscription: Subscription | None = None
+    _intake_subscription: Subscription | None = None
     _inflight: set[asyncio.Task[None]] = field(default_factory=set)
 
     def request_stop(self) -> None:
@@ -60,12 +75,18 @@ class RagRunner:
 
     async def run(self) -> None:
         self._subscription = await self.bus.subscribe(AsrFinal.subject, self._on_asr_final)
-        _LOG.info("rag_runner.ready")
+        if self.guard_intake_enabled:
+            self._intake_subscription = await self.bus.subscribe(
+                VisitIntakeStart.subject, self._on_intake_start
+            )
+        _LOG.info("rag_runner.ready", guard_intake=self.guard_intake_enabled)
         try:
             await self._stop.wait()
         finally:
             if self._subscription is not None:
                 await self._subscription.cancel()
+            if self._intake_subscription is not None:
+                await self._intake_subscription.cancel()
             for task in list(self._inflight):
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
@@ -79,7 +100,63 @@ class RagRunner:
         self._inflight.add(task)
         task.add_done_callback(self._inflight.discard)
 
+    async def _on_intake_start(self, event: BaseEvent) -> None:
+        if not isinstance(event, VisitIntakeStart):
+            return
+        _LOG.info("visit_intake.started", actor=event.actor)
+        await self._publish_answer_text(session_id="guard-intake", text=self._intake.start())
+
+    async def _handle_intake(self, event: AsrFinal) -> None:
+        reply, card = self._intake.consume(event.text)
+        if card is not None:
+            await self.bus.publish(
+                VisitCardCompleted(
+                    meta=EventMetadata(
+                        correlation_id=new_correlation_id(),
+                        producer=self.producer,
+                    ),
+                    language=str(event.language.value),
+                    full_name=str(card.get("full_name", "")),
+                    organization=str(card.get("organization", "")),
+                    purpose=str(card.get("purpose", "")),
+                    destination=str(card.get("destination", "")),
+                    has_pass=card.get("has_pass"),  # type: ignore[arg-type]
+                    has_id=card.get("has_id"),  # type: ignore[arg-type]
+                )
+            )
+            _LOG.info("visit_intake.completed", full_name=card.get("full_name"))
+        if reply:
+            await self._publish_answer_text(session_id=event.session_id, text=reply)
+
+    async def _publish_answer_text(self, *, session_id: str, text: str) -> None:
+        """Publish a deterministic (non-LLM) spoken line as a normal
+        llm.answer, so TTS and the dashboard treat it like any reply."""
+        await self.bus.publish(
+            LlmAnswer(
+                meta=EventMetadata(
+                    correlation_id=new_correlation_id(),
+                    producer=self.producer,
+                ),
+                session_id=session_id,  # type: ignore[arg-type]
+                text=text,
+                language=Language.RU,
+                citations=(),
+                confidence=1.0,
+            )
+        )
+
     async def _handle(self, event: AsrFinal) -> None:
+        # Security-desk interview intercepts the utterance before free chat.
+        if self.guard_intake_enabled:
+            if self._intake.engaged:
+                await self._handle_intake(event)
+                return
+            if wants_intake(event.text):
+                _LOG.info("visit_intake.triggered_by_voice", text=event.text[:60])
+                await self._publish_answer_text(
+                    session_id=event.session_id, text=self._intake.start()
+                )
+                return
         # Prefer the streaming path when the orchestrator supports it: tokens
         # go out as llm.answer.token so TTS/dashboards can start on the first
         # sentence while the model is still generating (the final llm.answer

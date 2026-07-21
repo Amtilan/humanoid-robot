@@ -219,6 +219,19 @@ export interface SettingsResponse {
   settings: Record<string, unknown>;
 }
 
+export interface VisitRecord {
+  id: number;
+  created_at: string;
+  language: string;
+  full_name: string;
+  organization: string;
+  purpose: string;
+  destination: string;
+  has_pass: boolean | null;
+  has_id: boolean | null;
+  status: "new" | "processed";
+}
+
 export interface LlmBackendConfig {
   mode: "local" | "cloud";
   base_url: string;
@@ -320,6 +333,14 @@ export const api = {
   voiceInterrupt: () => postJson<{ interrupted: boolean }>("/api/v1/voice/interrupt"),
   // LLM backend switching (local llama.cpp ⇄ cloud OpenAI-compatible). The
   // api key is stored on the robot (core-state volume), never in images.
+  // Guard desk (пункт охраны): visitor journal + starting the interview.
+  visitsList: (status?: "new" | "processed") =>
+    getJson<{ records: VisitRecord[] }>(
+      `/api/v1/visits?limit=100${status ? `&status=${status}` : ""}`,
+    ),
+  visitMarkProcessed: (id: number) =>
+    postJson<{ id: number; status: string }>(`/api/v1/visits/${id}/processed`),
+  visitIntakeStart: () => postJson<{ started: boolean }>("/api/v1/visits/intake/start"),
   llmConfigGet: () => getJson<LlmBackendConfig>("/api/v1/llm/config"),
   llmConfigSet: (body: LlmBackendConfig) =>
     postJson<LlmBackendConfig, LlmBackendConfig>("/api/v1/llm/config", body),

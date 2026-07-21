@@ -24,6 +24,10 @@ from humanoid_robot.events.system import (
     SystemReady,
     SystemShuttingDown,
 )
+from humanoid_robot.events.guard import (
+    VisitCardCompleted,
+    VisitIntakeStart,
+)
 from humanoid_robot.events.voice import (
     AsrFinal,
     AudioMonitorControl,
@@ -71,6 +75,8 @@ __all__ = [
     "SystemShuttingDown",
     "TtsSynthesisFinished",
     "TtsSynthesisStarted",
+    "VisitCardCompleted",
+    "VisitIntakeStart",
     "VoiceInterrupt",
     "WakeWordTriggered",
 ]
