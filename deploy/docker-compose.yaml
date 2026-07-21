@@ -140,6 +140,7 @@ services:
     volumes:
       - ./config/rag.yaml:/etc/humanoid-robot/rag.yaml:ro
       - ./config/wall-intents.yaml:/etc/humanoid-robot/wall-intents.yaml:ro
+      - ./config/presenter-kb.yaml:/etc/humanoid-robot/presenter-kb.yaml:ro
       - /var/lib/humanoid-robot/models:/var/lib/humanoid-robot/models:ro
       - rag-state:/var/lib/humanoid-robot
     depends_on:

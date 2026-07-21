@@ -303,6 +303,19 @@ class WallIntentMatcher:
                     )
         return None
 
+    def section_of(self, text: str) -> WallSection | None:
+        """Which project a phrase talks about, ignoring the "show" verb rule.
+
+        Used by the presenter KB for factual questions («кто строит аэропорт
+        Зайсан?») where the section is context, not a command.
+        """
+        words = _normalize(text)
+        for rule in self._sections:
+            for alias in rule.aliases:
+                if all(_word_in(w, words) for w in alias):
+                    return rule.section
+        return None
+
     def _match_section(self, words: list[str], language: Language) -> WallIntentMatch | None:
         has_verb = any(_word_in(verb, words) for verb in _SHOW_VERBS)
         for rule in self._sections:

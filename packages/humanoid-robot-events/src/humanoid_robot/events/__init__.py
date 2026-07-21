@@ -28,6 +28,7 @@ from humanoid_robot.events.guard import (
     VisitCardCompleted,
     VisitIntakeStart,
 )
+from humanoid_robot.events.presence import VisitorDetected
 from humanoid_robot.events.wall import (
     WallCommandRequested,
     WallCommandResulted,
@@ -81,6 +82,7 @@ __all__ = [
     "TtsSynthesisStarted",
     "VisitCardCompleted",
     "VisitIntakeStart",
+    "VisitorDetected",
     "VoiceInterrupt",
     "WakeWordTriggered",
     "WallCommandRequested",

@@ -33,6 +33,7 @@ members = [
     "humanoid-robot-adapters-parser-basic",
     "humanoid-robot-adapters-parser-docling",
     "humanoid-robot-adapters-rerank-bge",
+    "humanoid-robot-adapters-tts-cloud",
     "humanoid-robot-adapters-tts-piper",
     "humanoid-robot-adapters-unitree-g1",
     "humanoid-robot-adapters-vad-silero",
@@ -48,6 +49,7 @@ members = [
     "humanoid-robot-plugins-hello",
     "humanoid-robot-plugins-sdk",
     "humanoid-robot-ports",
+    "humanoid-robot-presence",
     "humanoid-robot-rag",
     "humanoid-robot-robot-adapter",
     "humanoid-robot-safety",
@@ -1867,6 +1869,25 @@ requires-dist = [
 provides-extras = ["runtime"]
 
 [[package]]
+name = "humanoid-robot-adapters-tts-cloud"
+version = "0.0.0"
+source = { editable = "packages/humanoid-robot-adapters-tts-cloud" }
+dependencies = [
+    { name = "httpx" },
+    { name = "humanoid-robot-domain" },
+    { name = "humanoid-robot-ports" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "humanoid-robot-domain", editable = "packages/humanoid-robot-domain" },
+    { name = "humanoid-robot-ports", editable = "packages/humanoid-robot-ports" },
+    { name = "pydantic", specifier = ">=2.9" },
+]
+
+[[package]]
 name = "humanoid-robot-adapters-tts-piper"
 version = "0.0.0"
 source = { editable = "packages/humanoid-robot-adapters-tts-piper" }
@@ -2209,6 +2230,35 @@ dependencies = [
 requires-dist = [
     { name = "humanoid-robot-domain", editable = "packages/humanoid-robot-domain" },
     { name = "humanoid-robot-events", editable = "packages/humanoid-robot-events" },
+    { name = "pydantic", specifier = ">=2.9" },
+]
+
+[[package]]
+name = "humanoid-robot-presence"
+version = "0.0.0"
+source = { editable = "apps/presence" }
+dependencies = [
+    { name = "httpx" },
+    { name = "humanoid-robot-adapters-nats" },
+    { name = "humanoid-robot-domain" },
+    { name = "humanoid-robot-events" },
+    { name = "humanoid-robot-observability" },
+    { name = "humanoid-robot-ports" },
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "humanoid-robot-adapters-nats", editable = "packages/humanoid-robot-adapters-nats" },
+    { name = "humanoid-robot-domain", editable = "packages/humanoid-robot-domain" },
+    { name = "humanoid-robot-events", editable = "packages/humanoid-robot-events" },
+    { name = "humanoid-robot-observability", editable = "packages/humanoid-robot-observability" },
+    { name = "humanoid-robot-ports", editable = "packages/humanoid-robot-ports" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "pillow", specifier = ">=10.4" },
     { name = "pydantic", specifier = ">=2.9" },
 ]
 

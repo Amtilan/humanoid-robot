@@ -129,3 +129,9 @@ guard:
 wall:
   enabled: false
   config_path: /etc/humanoid-robot/wall-intents.yaml
+  # Справка по 12 проектам (факты = данные самого приложения видеостены;
+  # перегенерация: deploy/scripts/gen-presenter-kb.py). При включённом wall
+  # она задаёт сценарий презентатора: системный промпт «только 12 проектов,
+  # остальное — вежливый отказ» + детерминированные ответы на вопросы о
+  # протяжённости/подрядчике/сроках/статусе.
+  kb_path: /etc/humanoid-robot/presenter-kb.yaml

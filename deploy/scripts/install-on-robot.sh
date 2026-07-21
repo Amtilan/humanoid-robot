@@ -223,7 +223,7 @@ main() {
     fetch deploy/scripts/verify-images.sh "${INSTALL_DIR}/verify-images.sh"
     chmod +x "${INSTALL_DIR}/verify-images.sh"
     install -d -m 0750 /var/backups/humanoid-robot
-    for cfg in voice rag wall-intents; do
+    for cfg in voice rag wall-intents presenter-kb; do
         local dst="${CONFIG_DIR}/${cfg}.yaml"
         if [[ -e "${dst}" ]]; then
             echo "  keeping existing ${dst}"

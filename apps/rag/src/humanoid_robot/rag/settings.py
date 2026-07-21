@@ -80,6 +80,19 @@ class WallIntentSettings(BaseModel):
     # Customer overrides for aliases / spoken accompaniment texts; the
     # built-in matrix (plan §5) applies when the file is absent.
     config_path: str = "/etc/humanoid-robot/wall-intents.yaml"
+    # Project reference data generated from the wall app's own files
+    # (deploy/scripts/gen-presenter-kb.py) + customer additions. Drives both
+    # deterministic factual answers and the presenter system prompt.
+    kb_path: str = "/etc/humanoid-robot/presenter-kb.yaml"
+    # Greeting on visitor.detected (camera). The cooldown is the second
+    # anti-repeat guard on top of the detector's own re-arm logic.
+    greeting_enabled: bool = True
+    greeting_ru: str = (
+        "Здравствуйте! Я робот-презентатор Министерства транспорта. "
+        "Могу показать проекты автодорог, железных дорог и аэропортов. "
+        "Что вам интересно?"
+    )
+    greeting_cooldown_s: float = 120.0
 
 
 class RagRunnerSettings(BaseSettings):

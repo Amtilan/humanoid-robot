@@ -58,6 +58,15 @@ class VoiceComposition:
         vad = _resolve(_VAD_GROUP, stack.vad)
         asr = _resolve(_ASR_GROUP, stack.asr)
         tts = _resolve(_TTS_GROUP, stack.tts)
+        if stack.tts_fallback is not None:
+            # Cloud-first voice with a local safety net: the fallback speaks
+            # whenever the primary (network) TTS fails.
+            from humanoid_robot.voice.fallback_tts import FallbackTts
+
+            tts = FallbackTts(
+                cast(TtsPort, tts),
+                cast(TtsPort, _resolve(_TTS_GROUP, stack.tts_fallback)),
+            )
         wake_word = (
             _resolve(_WAKEWORD_GROUP, stack.wake_word) if stack.wake_word is not None else None
         )

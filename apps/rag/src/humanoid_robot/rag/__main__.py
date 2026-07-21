@@ -18,6 +18,7 @@ from humanoid_robot.rag.grounded_qa import (
 )
 from humanoid_robot.rag.guard_kb import GuardKb
 from humanoid_robot.rag.llm_config_sync import LlmConfigSync
+from humanoid_robot.rag.presenter_kb import PRESENTER_SYSTEM_PROMPT_RU, PresenterKb
 from humanoid_robot.rag.runner import QaOrchestrator, RagRunner
 from humanoid_robot.rag.settings import RagRunnerSettings, load_settings
 from humanoid_robot.rag.wall_intent import WallIntentMatcher
@@ -30,7 +31,11 @@ def _load_guard_kb(s: RagRunnerSettings) -> GuardKb | None:
     return GuardKb.load(s.guard.kb_path)
 
 
-def _build_orchestrator(composition: RagComposition, kb: GuardKb | None) -> QaOrchestrator:
+def _build_orchestrator(
+    composition: RagComposition,
+    kb: GuardKb | None,
+    presenter_kb: PresenterKb | None = None,
+) -> QaOrchestrator:
     """Pick the conversational or grounded orchestrator from settings.mode."""
     s = composition.settings
     if s.mode == "conversation":
@@ -51,6 +56,12 @@ def _build_orchestrator(composition: RagComposition, kb: GuardKb | None) -> QaOr
                 "system_prompt_ru", ConversationConfig().system_prompt_ru
             )
             prompt_overrides["system_prompt_ru"] = base_ru + "\n" + kb.reference_block()
+        if presenter_kb is not None:
+            # Presenter scenario (plan §6): persona + allowed/forbidden topics
+            # + the project справка as the only source of facts. An explicit
+            # yaml override still wins.
+            base_ru = s.conversation.system_prompt_ru or PRESENTER_SYSTEM_PROMPT_RU
+            prompt_overrides["system_prompt_ru"] = base_ru + presenter_kb.reference_block()
         return ConversationOrchestrator(
             vector_store=composition.vector_store,
             reranker=composition.reranker,
@@ -116,12 +127,21 @@ async def _serve(settings: RagRunnerSettings) -> None:
     log = get_logger("cortex-rag.runner")
     composition = await RagComposition.build(settings)
     guard_kb = _load_guard_kb(settings)
-    orch = _build_orchestrator(composition, guard_kb)
-    log.info("cortex-rag.mode", mode=composition.settings.mode)
     wall_intent = None
+    presenter_kb = None
     if settings.wall.enabled:
         wall_intent = WallIntentMatcher(config_path=settings.wall.config_path)
-        log.info("wall_intent.enabled", config_path=settings.wall.config_path)
+        presenter_kb = PresenterKb.load(settings.wall.kb_path, matcher=wall_intent)
+        if presenter_kb.empty:
+            presenter_kb = None
+        log.info(
+            "wall_intent.enabled",
+            config_path=settings.wall.config_path,
+            kb_path=settings.wall.kb_path,
+            kb_sections=0 if presenter_kb is None else len(presenter_kb.sections),
+        )
+    orch = _build_orchestrator(composition, guard_kb, presenter_kb)
+    log.info("cortex-rag.mode", mode=composition.settings.mode)
     runner = RagRunner(
         orchestrator=orch,
         bus=composition.bus,
@@ -129,6 +149,13 @@ async def _serve(settings: RagRunnerSettings) -> None:
         guard_intake_enabled=composition.settings.guard.intake_enabled,
         guard_kb=guard_kb,
         wall_intent=wall_intent,
+        presenter_kb=presenter_kb,
+        greeting_text=(
+            settings.wall.greeting_ru
+            if settings.wall.enabled and settings.wall.greeting_enabled
+            else ""
+        ),
+        greeting_cooldown_s=settings.wall.greeting_cooldown_s,
     )
     # Live local⇄cloud LLM switching from the app; the yaml values are the
     # local baseline to fall back to.

@@ -51,6 +51,24 @@ services:
   # unitree_sdk2py + DDS) on host net so VideoClient reaches the G1 video
   # service on eth10, and serves multipart/x-mixed-replace on :8091. The
   # dashboard nginx proxies /api/v1/robot/camera/ -> host.docker.internal:8091.
+  # Visitor detection (presenter mode): polls the camera bridge's snapshots,
+  # publishes visitor.detected; cortex-rag voices the greeting. Bridge-net so
+  # NATS is nats:4222; the host-net camera bridge is reached via host-gateway.
+  presence:
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_OWNER:-amtilan}/humanoid-robot-base:${IMAGE_TAG:-main}
+    restart: unless-stopped
+    profiles: ["presence"]
+    command: ["cortex-presence"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      HR_PRESENCE_SNAPSHOT_URL: "${HR_PRESENCE_SNAPSHOT_URL:-http://host.docker.internal:8091/camera/front/snapshot}"
+      HR_PRESENCE_NATS_URL: "nats://nats:4222"
+      HR_AUTH__TOKEN: "${HR_AUTH__TOKEN:-}"
+    depends_on:
+      nats:
+        condition: service_healthy
+
   camera:
     image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_OWNER:-amtilan}/humanoid-robot-adapter-unitree:${IMAGE_TAG:-main}
     network_mode: host

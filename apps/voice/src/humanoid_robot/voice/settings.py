@@ -37,6 +37,9 @@ class VoiceStackSettings(BaseModel):
     vad: AdapterSelection
     asr: AdapterSelection
     tts: AdapterSelection
+    # Optional offline safety net: when set, `tts` is treated as the primary
+    # (e.g. cloud Kazakh voice) and this adapter speaks on its failures.
+    tts_fallback: AdapterSelection | None = None
     wake_word: AdapterSelection | None = None
 
 

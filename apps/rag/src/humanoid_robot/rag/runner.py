@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -28,6 +29,7 @@ from humanoid_robot.events import (
     LlmRejected,
     VisitCardCompleted,
     VisitIntakeStart,
+    VisitorDetected,
     WallCommandRequested,
 )
 from humanoid_robot.events.base import EventMetadata
@@ -36,6 +38,7 @@ from humanoid_robot.ports import EventBusPort, Subscription
 from humanoid_robot.rag.conversation import trim_incomplete_tail
 from humanoid_robot.rag.grounded_qa import GroundedQAResult
 from humanoid_robot.rag.guard_kb import GuardKb
+from humanoid_robot.rag.presenter_kb import PresenterKb
 from humanoid_robot.rag.visit_intake import VisitIntake, wants_intake
 from humanoid_robot.rag.wall_intent import WallIntentMatch, WallIntentMatcher
 
@@ -72,6 +75,14 @@ class RagRunner:
     guard_kb: GuardKb | None = None
     # Presenter mode: voice commands that drive the video wall bypass the LLM.
     wall_intent: WallIntentMatcher | None = None
+    # Presenter reference data; factual project answers are deterministic.
+    presenter_kb: PresenterKb | None = None
+    # Presenter greeting on visitor.detected; empty = disabled. The cooldown
+    # guards against re-greeting the same visitor (plan acceptance §8.1).
+    greeting_text: str = ""
+    greeting_cooldown_s: float = 120.0
+    _last_greeting_at: float = field(default=float("-inf"))
+    _visitor_subscription: Subscription | None = None
     _intake: VisitIntake = field(default_factory=VisitIntake)
     _stop: asyncio.Event = field(default_factory=asyncio.Event)
     _subscription: Subscription | None = None
@@ -87,7 +98,15 @@ class RagRunner:
             self._intake_subscription = await self.bus.subscribe(
                 VisitIntakeStart.subject, self._on_intake_start
             )
-        _LOG.info("rag_runner.ready", guard_intake=self.guard_intake_enabled)
+        if self.greeting_text:
+            self._visitor_subscription = await self.bus.subscribe(
+                VisitorDetected.subject, self._on_visitor_detected
+            )
+        _LOG.info(
+            "rag_runner.ready",
+            guard_intake=self.guard_intake_enabled,
+            greeting=bool(self.greeting_text),
+        )
         try:
             await self._stop.wait()
         finally:
@@ -95,6 +114,8 @@ class RagRunner:
                 await self._subscription.cancel()
             if self._intake_subscription is not None:
                 await self._intake_subscription.cancel()
+            if self._visitor_subscription is not None:
+                await self._visitor_subscription.cancel()
             for task in list(self._inflight):
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
@@ -107,6 +128,17 @@ class RagRunner:
         task = asyncio.create_task(self._handle(event), name=f"rag-answer[{event.session_id}]")
         self._inflight.add(task)
         task.add_done_callback(self._inflight.discard)
+
+    async def _on_visitor_detected(self, event: BaseEvent) -> None:
+        if not isinstance(event, VisitorDetected):
+            return
+        now = time.monotonic()
+        if now - self._last_greeting_at < self.greeting_cooldown_s:
+            _LOG.info("presenter_greeting.suppressed_by_cooldown")
+            return
+        self._last_greeting_at = now
+        _LOG.info("presenter_greeting.spoken", score=event.score)
+        await self._publish_answer_text(session_id="presenter-greeting", text=self.greeting_text)
 
     async def _on_intake_start(self, event: BaseEvent) -> None:
         if not isinstance(event, VisitIntakeStart):
@@ -180,13 +212,29 @@ class RagRunner:
             session_id=event.session_id, text=match.speak, language=match.language
         )
 
-    async def _handle(self, event: AsrFinal) -> None:
-        # Presenter fast path: wall commands never reach the LLM.
+    async def _try_presenter(self, event: AsrFinal) -> bool:
+        """Presenter fast paths: wall commands and exact project facts never
+        reach the LLM. True when the utterance was fully handled."""
         if self.wall_intent is not None:
             match = self.wall_intent.match(event.text)
             if match is not None:
                 await self._handle_wall_match(event, match)
-                return
+                return True
+        if self.presenter_kb is not None:
+            fact = self.presenter_kb.lookup(event.text)
+            if fact is not None:
+                _LOG.info("presenter_kb.fact_answer", text=event.text[:60])
+                await self._publish_answer_text(
+                    session_id=event.session_id,
+                    text=fact,
+                    language=self._language_for_response(event.language),
+                )
+                return True
+        return False
+
+    async def _handle(self, event: AsrFinal) -> None:
+        if await self._try_presenter(event):
+            return
         # Security-desk interview intercepts the utterance before free chat.
         if self.guard_intake_enabled:
             if self._intake.engaged:

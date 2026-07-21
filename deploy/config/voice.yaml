@@ -13,6 +13,8 @@ nats:
   client_name: cortex-voice
 
 session:
+  # Презентатор (RU+KZ): поставить `und` — распознавание само определяет язык
+  # каждой реплики (казахский включительно). `ru` жёстко фиксирует русский.
   language_hint: ru
   min_speech_ms: 200
   silence_hang_ms: 600
@@ -87,6 +89,22 @@ stack:
       voice_paths:
         ru: /var/lib/humanoid-robot/models/piper/ru_RU-irina-medium.onnx
         en: /var/lib/humanoid-robot/models/piper/en_US-lessac-medium.onnx
+  # Презентатор, этап 5: облачный синтез с казахским голосом. Раскомментировать,
+  # перенести piper в tts_fallback (офлайн-резерв) и задать ключ в
+  # /etc/humanoid-robot/cortex-voice.env (HR_TTS_CLOUD_API_KEY=...).
+  # Выбор казахского голоса согласуется с Заказчиком.
+  # tts:
+  #   name: cloud
+  #   config:
+  #     base_url: https://api.openai.com   # или OpenAI-совместимый прокси Yandex/Azure
+  #     api_key_env: HR_TTS_CLOUD_API_KEY
+  #     model: tts-1
+  #     voices: { ru: alloy, kk: alloy }
+  # tts_fallback:
+  #   name: piper
+  #   config:
+  #     voice_paths:
+  #       ru: /var/lib/humanoid-robot/models/piper/ru_RU-irina-medium.onnx
   # wake_word:
   #   name: openwakeword
   #   config:

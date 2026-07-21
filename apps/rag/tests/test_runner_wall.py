@@ -70,3 +70,33 @@ async def test_non_command_reaches_llm() -> None:
 
     assert orchestrator.calls == ["расскажи анекдот про роботов"]
     assert not [e for e in bus.published if isinstance(e, WallCommandRequested)]
+
+
+async def test_greeting_on_visitor_with_cooldown() -> None:
+    from humanoid_robot.events import VisitorDetected
+
+    bus = InMemoryEventBus()
+    runner = RagRunner(
+        orchestrator=_FakeOrchestrator(),
+        bus=bus,
+        greeting_text="Здравствуйте! Я робот-презентатор.",
+        greeting_cooldown_s=120.0,
+    )
+
+    def _visitor() -> VisitorDetected:
+        return VisitorDetected(
+            meta=EventMetadata(correlation_id=new_correlation_id(), producer="test"),
+            score=0.2,
+        )
+
+    await runner._on_visitor_detected(_visitor())
+    await runner._on_visitor_detected(_visitor())
+
+    greetings = [e for e in bus.published if isinstance(e, LlmAnswer)]
+    assert len(greetings) == 1  # second detection suppressed
+    assert "робот-презентатор" in greetings[0].text
+
+    runner._last_greeting_at = float("-inf")
+    await runner._on_visitor_detected(_visitor())
+    greetings = [e for e in bus.published if isinstance(e, LlmAnswer)]
+    assert len(greetings) == 2
