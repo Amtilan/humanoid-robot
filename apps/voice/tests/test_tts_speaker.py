@@ -165,3 +165,36 @@ class TestStreamedAnswerOrdering:
             "Второе предложение.",
             "Третий хвост без пробела.",
         ]
+
+    async def test_final_overtaking_tokens_still_speaks_everything(self) -> None:
+        """NATS gives no cross-subject ordering: the final answer can land
+        while token events are still in flight. The flush must reconcile with
+        the final text and speak the missing part; stragglers are swallowed."""
+        session_id = new_session_id()
+        bus = InMemoryEventBus()
+        tts = _RecordingTts()
+        audio_out = _FakeAudioOut()
+        speaker = TtsSpeaker(tts=tts, audio_out=audio_out, bus=bus, session_id=session_id)
+        await speaker.start()
+
+        text = "Первое предложение. Второе предложение. Третье предложение."
+        # Only the first sentence's tokens arrive...
+        await bus.publish(_mk_token(session_id, 0, "Первое предложение. "))
+        # ...then the final answer overtakes the rest.
+        await bus.publish(_mk_llm_answer(session_id, text))
+
+        for _ in range(500):
+            if any(isinstance(ev, TtsSynthesisFinished) for ev in bus.published):
+                break
+            await asyncio.sleep(0.01)
+        else:
+            raise AssertionError("stream never finished")
+
+        # Stragglers after close must not reopen a ghost stream.
+        await bus.publish(_mk_token(session_id, 1, "Второе предложение. "))
+        await asyncio.sleep(0.05)
+
+        spoken = " ".join(tts.texts)
+        assert spoken == text
+        started = [ev for ev in bus.published if isinstance(ev, TtsSynthesisStarted)]
+        assert len(started) == 1
