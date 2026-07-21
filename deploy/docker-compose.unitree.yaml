@@ -112,6 +112,11 @@ services:
     # audio_in is unitree_g1 (DDS) instead.
     devices:
       - /dev/snd:/dev/snd
+    # ALSA char-major 116: docker whitelists only the nodes present at
+    # container START, so a hot-plugged mic (new card index) was EPERM until
+    # a restart. This rule grants the whole major — swap mics live.
+    device_cgroup_rules:
+      - "c 116:* rmw"
     group_add:
       - audio
     environment:
