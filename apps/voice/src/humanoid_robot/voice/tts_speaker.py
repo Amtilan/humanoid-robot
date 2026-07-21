@@ -63,17 +63,30 @@ _SPEAK_TIMEOUT_S = 30.0
 # If the speaking flag shows no progress this long, treat the speaker as idle
 # so the mic can't stay deaf behind a stuck utterance.
 _SPEAKING_STALL_S = 35.0
+# A stream whose generator crashed may never send its final answer; close the
+# worker after this long without any new event so the stream can't leak.
+_STREAM_IDLE_TIMEOUT_S = 90.0
 
 _LOG = get_logger("cortex-voice.tts")
 
 
 @dataclass(slots=True)
 class _TokenStream:
-    """Accumulated state of one in-flight streamed answer."""
+    """Accumulated state of one in-flight streamed answer.
+
+    Token and final-answer events arrive on SEPARATE bus subscriptions whose
+    callbacks run concurrently — with a fast (cloud) model the final answer
+    overtakes still-queued tokens, and naive handling loses the last
+    sentence(s). Handlers therefore only ENQUEUE here; a per-stream worker
+    consumes strictly in arrival order and closes on the final item.
+    """
 
     utterance_id: UtteranceId
     buffer: str = ""
     duration_ms: int = 0
+    # ("token", delta, language) | ("final", tail_language marker)
+    queue: asyncio.Queue[tuple[str, str, Language]] = field(default_factory=asyncio.Queue)
+    worker: asyncio.Task[None] | None = None
 
 
 class _MultiSub:
@@ -109,6 +122,9 @@ class TtsSpeaker:
     # session can apply "interrupt only by name while the robot talks".
     _speaking_depth: int = field(default=0)
     _last_progress: float = field(default=0.0)
+    # One robot, one speaker: concurrent stream workers must not interleave
+    # their sentences on the audio output.
+    _speak_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     @property
     def speaking(self) -> bool:
@@ -137,28 +153,33 @@ class TtsSpeaker:
         speaking flag leaks and the mic stays deaf."""
         if not isinstance(event, LlmRejected):
             return
-        self._muted.discard(event.session_id)
-        stream = self._streams.pop(event.session_id, None)
+        stream = self._streams.get(event.session_id)
         if stream is not None:
-            await self._publish_finished(stream.utterance_id, stream.duration_ms)
+            self._muted.add(event.session_id)  # drop whatever is still queued
+            stream.queue.put_nowait(("final", "", Language.RU))
+        else:
+            self._muted.discard(event.session_id)
 
     async def interrupt(self) -> None:
         """Barge-in: the user started talking — stop speaking NOW and mute the
-        in-flight answers so their remaining sentences aren't spoken."""
+        in-flight answers so their remaining sentences aren't spoken. Their
+        workers keep draining silently and close on the final event."""
         task = self._current
         if task is not None and not task.done():
             task.cancel()
         for session_id in self._streams:
             self._muted.add(session_id)
-        self._streams.clear()
-        # Interrupted streams never reach their _publish_finished — don't let
-        # the speaking flag stick.
+        # Muted workers skip playback, so the flag flips immediately.
         self._speaking_depth = 0
         with contextlib.suppress(Exception):
             await self.audio_out.stop()
 
     def _wants(self, session_id: str) -> bool:
         return self.speak_all or session_id == self.session_id
+
+    async def _speak_serialized(self, text: str, language: Language) -> int:
+        async with self._speak_lock:
+            return await self._speak_cancellable(text, language)
 
     async def _speak_cancellable(self, text: str, language: Language) -> int:
         """Speak one chunk in a task `interrupt()` can cancel, with a hard
@@ -180,59 +201,102 @@ class TtsSpeaker:
         finally:
             self._current = None
 
-    async def _on_token(self, event: BaseEvent) -> None:
-        if not isinstance(event, LlmAnswerToken):
-            return
-        if not self._wants(event.session_id) or event.session_id in self._muted:
-            return
-        stream = self._streams.get(event.session_id)
-        if stream is None:
-            if len(self._streams) >= _MAX_TRACKED_STREAMS:
-                evicted = self._streams.pop(next(iter(self._streams)))
-                # Close the evicted stream properly or the speaking flag leaks.
-                await self._publish_finished(evicted.utterance_id, evicted.duration_ms)
-            stream = _TokenStream(utterance_id=new_utterance_id())
-            self._streams[event.session_id] = stream
-            await self._publish_started(stream.utterance_id)
-        stream.buffer += event.delta_text
-        # Speak every complete sentence accumulated so far. Handlers run
-        # sequentially per subscription, so later tokens queue up behind this
-        # playback and the sentences come out in order.
+    async def _ensure_stream(self, session_id: str) -> _TokenStream:
+        stream = self._streams.get(session_id)
+        if stream is not None:
+            return stream
+        if len(self._streams) >= _MAX_TRACKED_STREAMS:
+            # Ask the oldest worker to close; it pops itself from the dict.
+            evicted = next(iter(self._streams.values()))
+            evicted.queue.put_nowait(("final", "", Language.RU))
+        stream = _TokenStream(utterance_id=new_utterance_id())
+        self._streams[session_id] = stream
+        await self._publish_started(stream.utterance_id)
+        stream.worker = asyncio.create_task(
+            self._stream_worker(session_id, stream), name=f"tts-stream[{session_id}]"
+        )
+        return stream
+
+    async def _stream_worker(self, session_id: str, stream: _TokenStream) -> None:
+        """Consume one stream's events strictly in arrival order.
+
+        The final answer only closes the stream AFTER every queued token has
+        been spoken — a fast generator can no longer overtake its own tail.
+        """
+        try:
+            while True:
+                try:
+                    kind, text, language = await asyncio.wait_for(
+                        stream.queue.get(), timeout=_STREAM_IDLE_TIMEOUT_S
+                    )
+                except TimeoutError:
+                    _LOG.warning("tts.stream_idle_closed", session_id=session_id)
+                    break
+                if session_id in self._muted:
+                    if kind == "final":
+                        break
+                    continue
+                if kind == "token":
+                    stream.buffer += text
+                    await self._speak_complete_sentences(session_id, stream, language)
+                    continue
+                await self._flush_tail(stream, language)
+                break
+        except Exception:
+            _LOG.exception("tts.stream_worker_crashed", session_id=session_id)
+        finally:
+            self._streams.pop(session_id, None)
+            self._muted.discard(session_id)
+            await self._publish_finished(stream.utterance_id, stream.duration_ms)
+
+    async def _speak_complete_sentences(
+        self, session_id: str, stream: _TokenStream, language: Language
+    ) -> None:
         while True:
             match = _COMPLETE_SENTENCE_RE.match(stream.buffer)
             if match is None:
-                break
+                return
             sentence, stream.buffer = match.group(1).strip(), match.group(2)
             if sentence:
-                stream.duration_ms += await self._speak_cancellable(sentence, Language.RU)
-            if event.session_id in self._muted:
-                # Interrupted mid-stream — drop the rest.
+                stream.duration_ms += await self._speak_serialized(sentence, language)
+            if session_id in self._muted:
                 return
+
+    async def _flush_tail(self, stream: _TokenStream, language: Language) -> None:
+        """Flush the tail buffered at final-answer time. A tail WITHOUT
+        sentence-final punctuation is a max_tokens truncation artifact;
+        speaking it stops the robot mid-word, so drop it (unless nothing was
+        spoken yet — half an answer beats silence)."""
+        tail = stream.buffer.strip()
+        stream.buffer = ""
+        if tail and (_ends_sentence(tail) or stream.duration_ms == 0):
+            stream.duration_ms += await self._speak_serialized(tail, language)
+        elif tail:
+            _LOG.info("tts.drop_truncated_tail", tail=tail[:60])
+
+    async def _on_token(self, event: BaseEvent) -> None:
+        if not isinstance(event, LlmAnswerToken):
+            return
+        if not self._wants(event.session_id):
+            return
+        if event.session_id in self._muted and event.session_id not in self._streams:
+            return  # tokens straggling in after an interrupt closed the stream
+        stream = await self._ensure_stream(event.session_id)
+        stream.queue.put_nowait(("token", event.delta_text, Language.RU))
 
     async def _on_llm_answer(self, event: BaseEvent) -> None:
         if not isinstance(event, LlmAnswer):
             return
-        if event.session_id in self._muted:
-            # The user talked over this answer — swallow its final event.
-            self._muted.discard(event.session_id)
-            return
         if not self._wants(event.session_id):
             return
         language = self._language_for_event(event)
-        stream = self._streams.pop(event.session_id, None)
+        stream = self._streams.get(event.session_id)
         if stream is not None:
-            # Streamed answer: the sentences were already spoken from tokens —
-            # just flush whatever tail is still buffered. A tail WITHOUT
-            # sentence-final punctuation is a max_tokens truncation artifact;
-            # speaking it stops the robot mid-word, so drop it (unless nothing
-            # was spoken yet — half an answer beats silence).
-            duration_ms = stream.duration_ms
-            tail = stream.buffer.strip()
-            if tail and (_ends_sentence(tail) or duration_ms == 0):
-                duration_ms += await self._speak_cancellable(tail, language)
-            elif tail:
-                _LOG.info("tts.drop_truncated_tail", tail=tail[:60])
-            await self._publish_finished(stream.utterance_id, duration_ms)
+            stream.queue.put_nowait(("final", "", language))
+            return
+        if event.session_id in self._muted:
+            # The user talked over this answer — swallow its final event.
+            self._muted.discard(event.session_id)
             return
         await self._speak_batch(event.text, language)
 
@@ -264,23 +328,24 @@ class TtsSpeaker:
 
             producer = asyncio.create_task(_produce())
             try:
-                while True:
-                    frame = await queue.get()
-                    if frame is None:
-                        break
-                    self._current = asyncio.create_task(self._play_frame(frame))
-                    try:
-                        duration_ms += await asyncio.wait_for(
-                            self._current, timeout=_SPEAK_TIMEOUT_S
-                        )
-                        self._last_progress = time.monotonic()
-                    except TimeoutError:
-                        _LOG.error("tts.play_timeout")
-                        break
-                    except asyncio.CancelledError:
-                        break  # barge-in — stop this answer
-                    finally:
-                        self._current = None
+                async with self._speak_lock:
+                    while True:
+                        frame = await queue.get()
+                        if frame is None:
+                            break
+                        self._current = asyncio.create_task(self._play_frame(frame))
+                        try:
+                            duration_ms += await asyncio.wait_for(
+                                self._current, timeout=_SPEAK_TIMEOUT_S
+                            )
+                            self._last_progress = time.monotonic()
+                        except TimeoutError:
+                            _LOG.error("tts.play_timeout")
+                            break
+                        except asyncio.CancelledError:
+                            break  # barge-in — stop this answer
+                        finally:
+                            self._current = None
             finally:
                 producer.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):

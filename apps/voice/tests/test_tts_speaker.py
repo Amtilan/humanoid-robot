@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
@@ -11,7 +12,12 @@ from humanoid_robot.domain.shared import (
     new_session_id,
 )
 from humanoid_robot.domain.voice import AudioFormat, Language
-from humanoid_robot.events import LlmAnswer, TtsSynthesisFinished, TtsSynthesisStarted
+from humanoid_robot.events import (
+    LlmAnswer,
+    LlmAnswerToken,
+    TtsSynthesisFinished,
+    TtsSynthesisStarted,
+)
 from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.ports.ai import TtsRequest
 from humanoid_robot.ports.robot import AudioFrame
@@ -102,3 +108,60 @@ class TestTtsSpeaker:
         )
         event = _mk_llm_answer(speaker.session_id, "x")
         assert speaker._language_for_event(event) == Language.RU
+
+
+@dataclass(slots=True)
+class _RecordingTts:
+    """Records the exact texts sent to synthesis."""
+
+    texts: list[str] = field(default_factory=list)
+
+    def synthesize_stream(self, _req: TtsRequest) -> AsyncIterator[AudioFrame]:
+        raise NotImplementedError
+
+    async def synthesize(self, req: TtsRequest) -> AudioFrame:
+        self.texts.append(req.text)
+        return AudioFrame(pcm=b"\x00\x01" * 160, format=_FMT, monotonic_ns=0)
+
+
+def _mk_token(session_id: str, sequence: int, delta: str) -> LlmAnswerToken:
+    return LlmAnswerToken(
+        meta=EventMetadata(correlation_id=new_correlation_id(), producer="tests"),
+        session_id=session_id,  # type: ignore[arg-type]
+        sequence=sequence,
+        delta_text=delta,
+    )
+
+
+class TestStreamedAnswerOrdering:
+    async def test_burst_stream_speaks_every_sentence(self) -> None:
+        """Cloud models emit all tokens AND the final answer in one burst; the
+        final event must not overtake queued tokens (that lost the last
+        sentence: the robot audibly stopped before finishing its answer)."""
+        session_id = new_session_id()
+        bus = InMemoryEventBus()
+        tts = _RecordingTts()
+        audio_out = _FakeAudioOut()
+        speaker = TtsSpeaker(tts=tts, audio_out=audio_out, bus=bus, session_id=session_id)
+        await speaker.start()
+
+        text = "Первое предложение. Второе предложение. Третий хвост без пробела."
+        words = text.split(" ")
+        for i, word in enumerate(words):
+            suffix = " " if i < len(words) - 1 else ""
+            await bus.publish(_mk_token(session_id, i, word + suffix))
+        await bus.publish(_mk_llm_answer(session_id, text))
+
+        # The worker drains asynchronously — wait for the finished event.
+        for _ in range(500):
+            if any(isinstance(ev, TtsSynthesisFinished) for ev in bus.published):
+                break
+            await asyncio.sleep(0.01)
+        else:
+            raise AssertionError("stream never finished")
+
+        assert tts.texts == [
+            "Первое предложение.",
+            "Второе предложение.",
+            "Третий хвост без пробела.",
+        ]
