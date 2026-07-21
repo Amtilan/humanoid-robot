@@ -75,9 +75,9 @@ services:
       - "-ngl"
       - "${HR_LLM_NGL:-99}"
     healthcheck:
-      # The l4t-cuda base ships wget, not curl (the CPU image's healthcheck
-      # uses curl) — override the test so llama-cpp reports healthy and rag's
-      # depends_on:service_healthy gate is satisfied.
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health >/dev/null 2>&1 || exit 1"]
+      # Whichever HTTP client the image ships: the l4t-cuda build has wget,
+      # the upstream ggml CPU server image has only curl. rag's
+      # depends_on:service_healthy gate needs this to pass on both.
+      test: ["CMD-SHELL", "(wget -qO- http://127.0.0.1:8080/health || curl -sf http://127.0.0.1:8080/health) >/dev/null 2>&1 || exit 1"]
       # GPU init + 7B load is slower than the CPU image's 20 s window.
       start_period: 120s
