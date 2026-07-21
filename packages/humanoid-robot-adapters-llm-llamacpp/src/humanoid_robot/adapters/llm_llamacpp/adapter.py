@@ -12,6 +12,7 @@ Two endpoints, picked by whether the request carries a grammar:
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
@@ -23,7 +24,12 @@ from humanoid_robot.ports.ai import LlmRequest, LlmResponse
 
 
 class LlamaCppConfig(BaseModel):
-    """Runtime configuration."""
+    """Runtime configuration.
+
+    Speaks the OpenAI-compatible protocol, so `base_url` may point at the
+    local llama.cpp server OR any cloud OpenAI-compatible API (OpenAI,
+    OpenRouter, DeepSeek, …) — set `api_key` for those.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -31,6 +37,9 @@ class LlamaCppConfig(BaseModel):
     model: str = "qwen3-8b-instruct-q4_k_m"
     request_timeout_s: float = 60.0
     max_retries: int = Field(default=1, ge=0, le=5)
+    # Bearer token for cloud OpenAI-compatible endpoints; empty = no header
+    # (the local llama.cpp server needs none).
+    api_key: str = ""
 
 
 @dataclass(slots=True)
@@ -49,11 +58,31 @@ class LlamaCppLlm:
         self.config = config or LlamaCppConfig()
         self._client = client
 
+    async def reconfigure(self, *, base_url: str, model: str, api_key: str = "") -> None:
+        """Swap the backend live (local llama.cpp ⇄ cloud provider). The next
+        request opens a client against the new endpoint."""
+        self.config = LlamaCppConfig(
+            base_url=base_url,
+            model=model,
+            api_key=api_key,
+            request_timeout_s=self.config.request_timeout_s,
+            max_retries=self.config.max_retries,
+        )
+        old = self._client
+        self._client = None
+        if old is not None:
+            with contextlib.suppress(Exception):
+                await old.aclose()
+
     def _http(self) -> httpx.AsyncClient:
         if self._client is None:
+            headers = (
+                {"Authorization": f"Bearer {self.config.api_key}"} if self.config.api_key else {}
+            )
             self._client = httpx.AsyncClient(
                 base_url=self.config.base_url,
                 timeout=self.config.request_timeout_s,
+                headers=headers,
             )
         return self._client
 
@@ -106,6 +135,8 @@ class LlamaCppLlm:
             messages: list[dict[str, str]] = []
             if request.system_prompt.strip():
                 messages.append({"role": "system", "content": request.system_prompt})
+            for role, content in request.history:
+                messages.append({"role": role, "content": content})
             messages.append({"role": "user", "content": request.user_prompt})
             return {**common, "messages": messages}
         return {**common, "prompt": _compose_prompt(request), "grammar": request.grammar_gbnf}

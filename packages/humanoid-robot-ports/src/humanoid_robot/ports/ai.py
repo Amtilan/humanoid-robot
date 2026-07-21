@@ -50,6 +50,10 @@ class LlmRequest(BaseModel):
 
     system_prompt: str
     user_prompt: str
+    # Prior dialogue turns as (role, content) pairs, oldest first; roles are
+    # "user"/"assistant". Chat-capable adapters send them as real chat turns
+    # so the model keeps conversational context.
+    history: tuple[tuple[str, str], ...] = ()
     grammar_gbnf: str | None = None
     temperature: float = Field(ge=0.0, le=2.0, default=0.2)
     max_tokens: int = Field(gt=0, le=8192, default=1024)

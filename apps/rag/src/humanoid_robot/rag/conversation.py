@@ -77,6 +77,12 @@ class ConversationConfig(BaseModel):
     )
 
 
+# Rolling dialogue memory: enough context to feel like a conversation without
+# inflating prefill (llama.cpp caches the common prefix, so the cost of old
+# turns is paid once).
+_HISTORY_MAX_TURNS = 6
+
+
 @dataclass(slots=True)
 class ConversationOrchestrator:
     """RAG-augmented conversational reply generator."""
@@ -85,6 +91,14 @@ class ConversationOrchestrator:
     reranker: RerankerPort
     llm: LlmPort
     config: ConversationConfig = field(default_factory=ConversationConfig)
+    # One physical robot, one conversation: a single rolling history of
+    # (role, content) turns shared across sessions (voice + dashboard).
+    _history: list[tuple[str, str]] = field(default_factory=list)
+
+    def _remember(self, question: str, answer: str) -> None:
+        self._history.append(("user", question))
+        self._history.append(("assistant", answer))
+        del self._history[: -_HISTORY_MAX_TURNS * 2]
 
     async def stream_answer(self, question: str, language: Language) -> AsyncIterator[str]:
         """Yield answer deltas as the LLM generates them (Alice-style
@@ -96,17 +110,21 @@ class ConversationOrchestrator:
         request = LlmRequest(
             system_prompt=self._system_prompt(language),
             user_prompt=self._render_prompt(question, context),
+            history=tuple(self._history),
             grammar_gbnf=None,
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
         )
-        yielded = False
+        parts: list[str] = []
         async for delta in self.llm.stream(request):
             if delta:
-                yielded = True
+                parts.append(delta)
                 yield delta
-        if not yielded:
-            yield self._fallback(language)
+        if not parts:
+            fallback = self._fallback(language)
+            yield fallback
+            return
+        self._remember(question, "".join(parts).strip())
 
     async def answer(self, question: str, language: Language) -> GroundedQAResult:
         hits = await self._retrieve(question)
@@ -114,12 +132,15 @@ class ConversationOrchestrator:
         request = LlmRequest(
             system_prompt=self._system_prompt(language),
             user_prompt=self._render_prompt(question, context),
+            history=tuple(self._history),
             grammar_gbnf=None,  # free-form natural language, not JSON
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
         )
         response = await self.llm.generate(request)
         text = response.text.strip() or self._fallback(language)
+        if response.text.strip():
+            self._remember(question, text)
         answer = GroundedAnswer(
             answer=text,
             citations=(),

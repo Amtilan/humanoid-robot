@@ -102,6 +102,29 @@ class LlmRejected(BaseEvent):
     fallback_text: str | None = None
 
 
+class LlmConfigChanged(BaseEvent):
+    """The operator switched the LLM backend (local ⇄ cloud) from the app.
+
+    Carries NO secrets — consumers fetch the full config (incl. api key)
+    from core over HTTP.
+    """
+
+    subject: ClassVar[str] = "llm.config.changed"
+    schema_version: ClassVar[int] = 1
+
+    mode: str  # "local" | "cloud"
+    model: str = ""
+
+
+class VoiceInterrupt(BaseEvent):
+    """Operator asked the robot to stop talking right now (UI stop button)."""
+
+    subject: ClassVar[str] = "voice.interrupt"
+    schema_version: ClassVar[int] = 1
+
+    reason: str = "operator"
+
+
 class TtsSynthesisStarted(BaseEvent):
     """TTS started producing audio for an utterance."""
 

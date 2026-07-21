@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import signal
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from humanoid_robot.rag.grounded_qa import (
     GroundedQAConfig,
     GroundedQAOrchestrator,
 )
+from humanoid_robot.rag.llm_config_sync import LlmConfigSync
 from humanoid_robot.rag.runner import QaOrchestrator, RagRunner
 from humanoid_robot.rag.settings import RagRunnerSettings, load_settings
 
@@ -104,6 +106,14 @@ async def _serve(settings: RagRunnerSettings) -> None:
         bus=composition.bus,
         producer=composition.settings.service_name,
     )
+    # Live local⇄cloud LLM switching from the app; the yaml values are the
+    # local baseline to fall back to.
+    llm_sync = LlmConfigSync(
+        composition.llm,
+        local_base_url=settings.stack.llm.config.get("base_url", "http://llama-cpp:8080"),
+        local_model=settings.stack.llm.config.get("model", ""),
+    )
+    llm_sync_sub = await llm_sync.start(composition.bus)
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, runner.request_stop)
@@ -111,6 +121,8 @@ async def _serve(settings: RagRunnerSettings) -> None:
     try:
         await runner.run()
     finally:
+        with contextlib.suppress(Exception):
+            await llm_sync_sub.cancel()
         await composition.bus.close()
 
 

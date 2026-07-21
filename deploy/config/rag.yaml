@@ -65,6 +65,10 @@ conversation:
 #   reranker_adapters:  bge_reranker_v2_m3
 #   vector_adapters:    qdrant_local
 stack:
+  # This block is the LOCAL baseline. Switching to a cloud provider (ChatGPT
+  # etc.) is done FROM THE APP — Ещё → «Модель ИИ»: the token is stored on the
+  # robot's core-state volume and cortex-rag reconfigures live; nothing
+  # secret ever lives in this file or in an image.
   llm:
     name: llama_cpp
     config:

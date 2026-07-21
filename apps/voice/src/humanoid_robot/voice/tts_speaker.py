@@ -35,6 +35,7 @@ from humanoid_robot.events import (
     LlmRejected,
     TtsSynthesisFinished,
     TtsSynthesisStarted,
+    VoiceInterrupt,
 )
 from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.observability import get_logger
@@ -118,11 +119,18 @@ class TtsSpeaker:
         )
 
     async def start(self) -> Subscription:
-        """Subscribe to answer/token/rejected events — one cancel handle."""
+        """Subscribe to answer/token/rejected/interrupt events — one handle."""
         answer_sub = await self.bus.subscribe(LlmAnswer.subject, self._on_llm_answer)
         token_sub = await self.bus.subscribe(LlmAnswerToken.subject, self._on_token)
         rejected_sub = await self.bus.subscribe(LlmRejected.subject, self._on_rejected)
-        return _MultiSub([answer_sub, token_sub, rejected_sub])
+        interrupt_sub = await self.bus.subscribe(VoiceInterrupt.subject, self._on_interrupt)
+        return _MultiSub([answer_sub, token_sub, rejected_sub, interrupt_sub])
+
+    async def _on_interrupt(self, event: BaseEvent) -> None:
+        """UI stop button: cut the speech off (voice barge-in is disabled by
+        the half-duplex mic, so the bus event is the interrupt path)."""
+        if isinstance(event, VoiceInterrupt):
+            await self.interrupt()
 
     async def _on_rejected(self, event: BaseEvent) -> None:
         """A rejected answer still has to CLOSE its token stream — otherwise the

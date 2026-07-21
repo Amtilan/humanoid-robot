@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ChevronRight, KeyRound, Wrench } from "lucide-react";
 
 import { api, setAuthToken } from "../api/client";
+import { LlmSwitcher } from "../components/LlmSwitcher";
 
 const DEV_PAGES = [
   { to: "/dashboard", label: "Dashboard" },
@@ -38,6 +39,8 @@ export function MorePage() {
           </div>
         </div>
       </section>
+
+      <LlmSwitcher />
 
       <button
         type="button"

@@ -33,6 +33,8 @@ from humanoid_robot.events.voice import (
     SpeechDetected,
     TtsSynthesisFinished,
     TtsSynthesisStarted,
+    LlmConfigChanged,
+    VoiceInterrupt,
     WakeWordTriggered,
 )
 
@@ -43,6 +45,7 @@ __all__ = [
     "EventMetadata",
     "LlmAnswer",
     "LlmAnswerToken",
+    "LlmConfigChanged",
     "LlmRejected",
     "OtaApplied",
     "OtaAvailable",
@@ -64,5 +67,6 @@ __all__ = [
     "SystemShuttingDown",
     "TtsSynthesisFinished",
     "TtsSynthesisStarted",
+    "VoiceInterrupt",
     "WakeWordTriggered",
 ]

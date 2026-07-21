@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Send, Bot, User, Volume2 } from "lucide-react";
+import { Send, Bot, Trash2, User, Volume2 } from "lucide-react";
 
 import { api } from "../api/client";
 import { cn } from "../lib/cn";
@@ -16,7 +16,7 @@ interface Props {
 
 /** Chat transcript + composer, driven by a shared `useConversation`. */
 export function ChatPanel({ conversation, language, voice = true, className }: Props) {
-  const { messages, pending, send } = conversation;
+  const { messages, pending, send, clear } = conversation;
   const { push } = useToast();
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -50,7 +50,18 @@ export function ChatPanel({ conversation, language, voice = true, className }: P
             Спросите робота о чём угодно — голосом или текстом.
           </p>
         ) : (
-          messages.map((m) => <Bubble key={m.id} message={m} />)
+          <>
+            <button
+              type="button"
+              onClick={clear}
+              className="mx-auto flex items-center gap-1 rounded-full px-3 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+            >
+              <Trash2 className="h-3 w-3" /> Очистить историю
+            </button>
+            {messages.map((m) => (
+              <Bubble key={m.id} message={m} />
+            ))}
+          </>
         )}
       </div>
       <form onSubmit={submit} className="flex items-center gap-2 border-t border-border p-3">

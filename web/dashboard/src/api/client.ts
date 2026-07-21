@@ -216,6 +216,13 @@ export interface SettingsResponse {
   settings: Record<string, unknown>;
 }
 
+export interface LlmBackendConfig {
+  mode: "local" | "cloud";
+  base_url: string;
+  model: string;
+  api_key: string;
+}
+
 export interface CpuStats {
   percent: number;
   per_core_percent: number[];
@@ -305,6 +312,14 @@ export const api = {
   // Make the robot speak the given text verbatim (no LLM) out of its speaker.
   voiceSay: (body: { text: string; language?: "ru" | "en" }) =>
     postJson<{ session_id: string }, typeof body>("/api/v1/voice/say", body),
+  // Stop the robot's speech immediately (voice barge-in is disabled by the
+  // half-duplex mic, so this button is the interrupt path).
+  voiceInterrupt: () => postJson<{ interrupted: boolean }>("/api/v1/voice/interrupt"),
+  // LLM backend switching (local llama.cpp ⇄ cloud OpenAI-compatible). The
+  // api key is stored on the robot (core-state volume), never in images.
+  llmConfigGet: () => getJson<LlmBackendConfig>("/api/v1/llm/config"),
+  llmConfigSet: (body: LlmBackendConfig) =>
+    postJson<LlmBackendConfig, LlmBackendConfig>("/api/v1/llm/config", body),
   settings: () => getJson<SettingsResponse>("/api/v1/settings/"),
   knowledgeStatus: () => getJson<KnowledgeStatusResponse>("/api/v1/knowledge/status"),
   deleteKnowledgeSource: (sourceId: string) =>

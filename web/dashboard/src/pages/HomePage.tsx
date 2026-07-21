@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { BatteryMedium, Wifi, WifiOff } from "lucide-react";
+import { BatteryMedium, VolumeX, Wifi, WifiOff } from "lucide-react";
 
+import { api } from "../api/client";
 import { CameraView } from "../components/CameraView";
 import { ChatPanel } from "../components/ChatPanel";
 import { SafetyToggle } from "../components/SafetyToggle";
@@ -59,6 +60,15 @@ export function HomePage() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              title="Робот замолчит немедленно"
+              onClick={() => void api.voiceInterrupt().catch(() => undefined)}
+              className="flex h-8 items-center gap-1.5 rounded-full bg-black/40 px-3 text-xs font-medium text-white/80 backdrop-blur hover:text-white"
+            >
+              <VolumeX className="h-3.5 w-3.5" />
+              Замолчи
+            </button>
             <SafetyToggle variant="chip" />
             <div className="flex overflow-hidden rounded-full bg-black/40 text-xs backdrop-blur">
               {(["ru", "en"] as const).map((l) => (

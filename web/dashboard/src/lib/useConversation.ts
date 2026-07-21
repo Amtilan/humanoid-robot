@@ -1,17 +1,34 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "../api/client";
 import { useEventSubscription, type EventEnvelope } from "./eventStream";
 
-// Subjects the conversation cares about. asr.final is the pipeline's echo of
-// the user turn; we already have that text locally (typed or dictated), so we
-// only consume the LLM side here.
-const LLM_SUBJECTS = new Set([
+// Subjects the conversation renders. Sessions we started show a streaming
+// bubble; FOREIGN sessions (the robot's own mic dialogue, /voice/say
+// announcements) are rendered too, so the panel is the full conversation log.
+const CHAT_SUBJECTS = new Set([
+  "asr.final",
   "llm.answer.token",
   "llm.answer",
   "llm.rejected",
 ]);
-const isLlmSubject = (subject: string) => LLM_SUBJECTS.has(subject);
+const isChatSubject = (subject: string) => CHAT_SUBJECTS.has(subject);
+
+// Chat log survives page reloads.
+const STORAGE_KEY = "humanoid-robot.chat.history";
+const STORAGE_MAX_MESSAGES = 60;
+
+function loadStored(): ChatMessage[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as ChatMessage[];
+    // Anything mid-stream at reload time is finished as-is.
+    return parsed.map((m) => (m.status === "streaming" ? { ...m, status: "done" } : m));
+  } catch {
+    return [];
+  }
+}
 
 export type ChatRole = "user" | "assistant";
 export type ChatStatus = "streaming" | "done" | "rejected";
@@ -43,21 +60,51 @@ const nextId = () => `m${Date.now().toString(36)}-${(counter += 1)}`;
  * assistant bubble.
  */
 export function useConversation(): Conversation {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(loadStored);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // session_id -> assistant message id, so streamed tokens find their bubble.
   const routeRef = useRef(new Map<string, string>());
 
+  // Persist the log (capped) so a reload doesn't lose the conversation.
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-STORAGE_MAX_MESSAGES)));
+    } catch {
+      // storage may be full/blocked — the in-memory log still works
+    }
+  }, [messages]);
+
   const patch = useCallback((id: string, fn: (m: ChatMessage) => ChatMessage) => {
     setMessages((prev) => prev.map((m) => (m.id === id ? fn(m) : m)));
   }, []);
 
-  useEventSubscription(isLlmSubject, (envelope: EventEnvelope) => {
+  useEventSubscription(isChatSubject, (envelope: EventEnvelope) => {
     const session = envelope.data.session_id as string | undefined;
     if (!session) return;
     const target = routeRef.current.get(session);
-    if (!target) return;
+    if (!target) {
+      // FOREIGN session — the robot's own mic dialogue or a voice/say
+      // announcement. Render it so the panel shows the whole conversation.
+      if (envelope.subject === "asr.final") {
+        const text = String(envelope.data.text ?? "").trim();
+        if (text) {
+          setMessages((prev) => [
+            ...prev,
+            { id: nextId(), role: "user", text, status: "done", sessionId: session },
+          ]);
+        }
+      } else if (envelope.subject === "llm.answer") {
+        const text = String(envelope.data.text ?? "").trim();
+        if (text) {
+          setMessages((prev) => [
+            ...prev,
+            { id: nextId(), role: "assistant", text, status: "done", sessionId: session },
+          ]);
+        }
+      }
+      return;
+    }
 
     if (envelope.subject === "llm.answer.token") {
       const delta = String(envelope.data.delta_text ?? envelope.data.text ?? "");
@@ -123,6 +170,11 @@ export function useConversation(): Conversation {
     setMessages([]);
     setError(null);
     setPending(false);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
+    }
   }, []);
 
   return { messages, pending, error, send, clear };

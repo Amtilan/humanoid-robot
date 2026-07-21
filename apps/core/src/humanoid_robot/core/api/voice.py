@@ -15,10 +15,32 @@ from pydantic import BaseModel, ConfigDict, Field
 from humanoid_robot.core.container import AppContainer
 from humanoid_robot.domain.shared import SessionId, new_correlation_id, new_session_id
 from humanoid_robot.domain.voice import Language
-from humanoid_robot.events import LlmAnswer
+from humanoid_robot.events import LlmAnswer, VoiceInterrupt
 from humanoid_robot.events.base import EventMetadata
 
 router = APIRouter()
+
+
+class InterruptResponse(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    interrupted: bool = True
+
+
+@router.post("/interrupt", response_model=InterruptResponse)
+async def interrupt(request: Request) -> InterruptResponse:
+    """Stop the robot's speech immediately (dashboard stop button)."""
+    container: AppContainer = request.app.state.container
+    await container.event_bus.publish(
+        VoiceInterrupt(
+            meta=EventMetadata(
+                correlation_id=new_correlation_id(),
+                producer="cortex-core.voice_interrupt",
+            ),
+            reason="operator",
+        )
+    )
+    return InterruptResponse()
 
 
 class SayRequest(BaseModel):
