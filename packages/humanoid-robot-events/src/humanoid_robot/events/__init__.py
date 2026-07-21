@@ -28,6 +28,10 @@ from humanoid_robot.events.guard import (
     VisitCardCompleted,
     VisitIntakeStart,
 )
+from humanoid_robot.events.wall import (
+    WallCommandRequested,
+    WallCommandResulted,
+)
 from humanoid_robot.events.voice import (
     AsrFinal,
     AudioMonitorControl,
@@ -79,4 +83,6 @@ __all__ = [
     "VisitIntakeStart",
     "VoiceInterrupt",
     "WakeWordTriggered",
+    "WallCommandRequested",
+    "WallCommandResulted",
 ]

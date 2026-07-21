@@ -50,6 +50,8 @@ _DEFAULT_SUBJECTS: tuple[str, ...] = (
     "safety.watchdog.heartbeat",
     "robot.command.requested",
     "robot.command.result",
+    "wall.command.requested",
+    "wall.command.result",
 )
 
 

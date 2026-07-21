@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import {
+  useEventHistory,
   useEventStream,
   useEventSubscription,
   type EventEnvelope,
@@ -13,9 +14,15 @@ export function EventsPage() {
   const [events, setEvents] = useState<EventEnvelope[]>([]);
   const { connected } = useEventStream();
 
-  useEventSubscription(pattern, (envelope) => {
-    setEvents((prev) => [envelope, ...prev].slice(0, MAX_EVENTS));
-  });
+  const append = (envelope: EventEnvelope) => {
+    setEvents((prev) => {
+      if (prev.some((e) => e.event_id === envelope.event_id)) return prev;
+      return [envelope, ...prev].slice(0, MAX_EVENTS);
+    });
+  };
+  // Seed from the robot-side journal so a refresh doesn't start from blank.
+  useEventHistory(">", append);
+  useEventSubscription(pattern, append);
 
   const stats = useMemo(() => {
     const counts = new Map<string, number>();

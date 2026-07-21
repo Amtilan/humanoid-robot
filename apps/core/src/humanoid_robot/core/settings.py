@@ -124,6 +124,20 @@ class SafetySettings(BaseModel):
         return Path(value)
 
 
+class WallSettings(BaseModel):
+    """Video-wall integration (presenter deployments).
+
+    ``agent_url`` points at the ``cortex-wall-agent`` next to the wall
+    application — the compose simulator by default, the wall PC's address in
+    production (``HR_WALL__AGENT_URL=http://<wall-pc>:8093``).
+    """
+
+    enabled: bool = True
+    agent_url: str = "http://wall-agent:8093"
+    token: str = ""
+    timeout_s: float = 5.0
+
+
 class CoreSettings(BaseSettings):
     """Root configuration object."""
 
@@ -141,6 +155,7 @@ class CoreSettings(BaseSettings):
     observability: ObservabilitySettings = ObservabilitySettings()
     auth: AuthSettings = AuthSettings()
     safety: SafetySettings = SafetySettings()
+    wall: WallSettings = WallSettings()
 
     @classmethod
     def settings_customise_sources(

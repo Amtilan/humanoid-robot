@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import {
+  useEventHistory,
   useEventStream,
   useEventSubscription,
   type EventEnvelope,
@@ -30,13 +31,14 @@ export function VoiceSessionsPage() {
   const { connected } = useEventStream();
   const [sessions, setSessions] = useState<Map<string, Session>>(new Map());
 
-  useEventSubscription(isVoiceSubject, (envelope) => {
+  const ingest = (envelope: EventEnvelope) => {
       const sessionId = (envelope.data.session_id as string | undefined) ?? null;
       if (!sessionId) return;
       setSessions((prev) => {
         const next = new Map(prev);
         const existing = next.get(sessionId);
         if (existing) {
+          if (existing.events.some((e) => e.event_id === envelope.event_id)) return prev;
           existing.events = [...existing.events, envelope].slice(-40);
           existing.last_at = envelope.occurred_at;
           next.set(sessionId, existing);
@@ -56,7 +58,10 @@ export function VoiceSessionsPage() {
         }
         return next;
       });
-    });
+    };
+  // Seed from the robot-side journal so a refresh doesn't start from blank.
+  useEventHistory(isVoiceSubject, ingest);
+  useEventSubscription(isVoiceSubject, ingest);
 
   const ordered = useMemo(
     () =>

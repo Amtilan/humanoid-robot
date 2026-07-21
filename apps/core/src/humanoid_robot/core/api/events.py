@@ -11,6 +11,7 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from humanoid_robot.core.api.auth import enforce_ws_token
 from humanoid_robot.core.container import AppContainer
+from humanoid_robot.core.event_journal import list_events_sync
 from humanoid_robot.events import BaseEvent
 from humanoid_robot.observability import get_logger
 from humanoid_robot.ports import EventBusPort
@@ -18,6 +19,17 @@ from humanoid_robot.ports import EventBusPort
 _LOG = get_logger("cortex-core.api.events")
 
 router = APIRouter()
+
+
+@router.get("/history")
+async def events_history(
+    limit: int = Query(default=500, ge=1, le=2000),
+    subject: str = Query(default="", description="Subject prefix filter."),
+) -> dict[str, Any]:
+    """Replay the persisted event tail (oldest-first) so a freshly opened
+    page can seed itself before live WebSocket events arrive."""
+    records = await asyncio.to_thread(list_events_sync, limit, subject)
+    return {"records": records}
 
 
 @router.websocket("/ws")

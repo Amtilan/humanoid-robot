@@ -38,6 +38,7 @@ members = [
     "humanoid-robot-adapters-vad-silero",
     "humanoid-robot-adapters-vector-qdrant",
     "humanoid-robot-adapters-wakeword-openwakeword",
+    "humanoid-robot-adapters-wall-http",
     "humanoid-robot-contract-tests",
     "humanoid-robot-core",
     "humanoid-robot-domain",
@@ -52,6 +53,7 @@ members = [
     "humanoid-robot-safety",
     "humanoid-robot-testing",
     "humanoid-robot-voice",
+    "humanoid-robot-wall-agent",
 ]
 
 [[package]]
@@ -1987,6 +1989,25 @@ requires-dist = [
 provides-extras = ["runtime"]
 
 [[package]]
+name = "humanoid-robot-adapters-wall-http"
+version = "0.0.0"
+source = { editable = "packages/humanoid-robot-adapters-wall-http" }
+dependencies = [
+    { name = "httpx" },
+    { name = "humanoid-robot-domain" },
+    { name = "humanoid-robot-ports" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "humanoid-robot-domain", editable = "packages/humanoid-robot-domain" },
+    { name = "humanoid-robot-ports", editable = "packages/humanoid-robot-ports" },
+    { name = "pydantic", specifier = ">=2.9" },
+]
+
+[[package]]
 name = "humanoid-robot-contract-tests"
 version = "0.0.0"
 source = { editable = "packages/humanoid-robot-contract-tests" }
@@ -2019,6 +2040,7 @@ dependencies = [
     { name = "aiosqlite" },
     { name = "fastapi" },
     { name = "humanoid-robot-adapters-nats" },
+    { name = "humanoid-robot-adapters-wall-http" },
     { name = "humanoid-robot-domain" },
     { name = "humanoid-robot-events" },
     { name = "humanoid-robot-observability" },
@@ -2037,6 +2059,7 @@ requires-dist = [
     { name = "aiosqlite", specifier = ">=0.20" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "humanoid-robot-adapters-nats", editable = "packages/humanoid-robot-adapters-nats" },
+    { name = "humanoid-robot-adapters-wall-http", editable = "packages/humanoid-robot-adapters-wall-http" },
     { name = "humanoid-robot-domain", editable = "packages/humanoid-robot-domain" },
     { name = "humanoid-robot-events", editable = "packages/humanoid-robot-events" },
     { name = "humanoid-robot-observability", editable = "packages/humanoid-robot-observability" },
@@ -2345,6 +2368,21 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "typer", specifier = ">=0.15" },
+]
+
+[[package]]
+name = "humanoid-robot-wall-agent"
+version = "0.0.0"
+source = { editable = "apps/wall-agent" }
+dependencies = [
+    { name = "humanoid-robot-domain" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "humanoid-robot-domain", editable = "packages/humanoid-robot-domain" },
+    { name = "pydantic", specifier = ">=2.9" },
 ]
 
 [[package]]

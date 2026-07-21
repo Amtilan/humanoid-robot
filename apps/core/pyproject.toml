@@ -16,6 +16,7 @@ dependencies = [
     "humanoid-robot-events",
     "humanoid-robot-ports",
     "humanoid-robot-adapters-nats",
+    "humanoid-robot-adapters-wall-http",
     "humanoid-robot-observability",
     "humanoid-robot-safety",
     "aiosqlite>=0.20",
@@ -26,6 +27,7 @@ humanoid-robot-domain = { workspace = true }
 humanoid-robot-events = { workspace = true }
 humanoid-robot-ports = { workspace = true }
 humanoid-robot-adapters-nats = { workspace = true }
+humanoid-robot-adapters-wall-http = { workspace = true }
 humanoid-robot-observability = { workspace = true }
 humanoid-robot-safety = { workspace = true }
 

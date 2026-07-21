@@ -342,6 +342,11 @@ export const api = {
   voiceInterrupt: () => postJson<{ interrupted: boolean }>("/api/v1/voice/interrupt"),
   // LLM backend switching (local llama.cpp ⇄ cloud OpenAI-compatible). The
   // api key is stored on the robot (core-state volume), never in images.
+  // Persisted event tail for the dev console pages (replayed on mount).
+  eventsHistory: (limit = 500, subject = "") =>
+    getJson<{ records: import("../lib/eventStream").EventEnvelope[] }>(
+      `/api/v1/events/history?limit=${limit}${subject ? `&subject=${encodeURIComponent(subject)}` : ""}`,
+    ),
   // Full conversation history persisted on the robot (voice + chat).
   dialogueHistory: (limit = 200) =>
     getJson<{ records: DialogueRecord[] }>(`/api/v1/dialogue?limit=${limit}`),

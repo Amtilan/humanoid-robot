@@ -16,6 +16,7 @@ from humanoid_robot.core.api.settings import router as settings_router
 from humanoid_robot.core.api.system import router as system_router
 from humanoid_robot.core.api.visits import router as visits_router
 from humanoid_robot.core.api.voice import router as voice_router
+from humanoid_robot.core.api.wall import router as wall_router
 
 router = APIRouter()
 router.include_router(system_router, prefix="/system", tags=["system"])
@@ -32,5 +33,6 @@ router.include_router(knowledge_router, prefix="/knowledge", tags=["knowledge"])
 router.include_router(diagnostics_router, prefix="/diagnostics", tags=["diagnostics"])
 router.include_router(safety_router, prefix="/safety", tags=["safety"])
 router.include_router(settings_router, prefix="/settings", tags=["settings"])
+router.include_router(wall_router, prefix="/wall", tags=["wall"])
 
 __all__ = ["router"]

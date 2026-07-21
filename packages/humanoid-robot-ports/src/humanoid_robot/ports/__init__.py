@@ -43,6 +43,7 @@ from humanoid_robot.ports.voice import (
     WakeWordEvent,
     WakeWordPort,
 )
+from humanoid_robot.ports.wall import WallControlPort
 
 __all__ = [
     "ArmPort",
@@ -80,4 +81,5 @@ __all__ = [
     "Verdict",
     "WakeWordEvent",
     "WakeWordPort",
+    "WallControlPort",
 ]

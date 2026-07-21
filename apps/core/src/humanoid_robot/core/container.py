@@ -15,14 +15,17 @@ from typing import Self
 from prometheus_client import CollectorRegistry
 
 from humanoid_robot.adapters.nats import NatsEventBus, NatsEventBusConfig
+from humanoid_robot.adapters.wall_http import WallHttpClient
 from humanoid_robot.core.diagnostics_ticker import DiagnosticsTicker
 from humanoid_robot.core.dialogue_journal import DialogueJournal
+from humanoid_robot.core.event_journal import EventJournal
 from humanoid_robot.core.knowledge_service import KnowledgeService
 from humanoid_robot.core.plugin_manager import PluginManager
 from humanoid_robot.core.robot_manifest_cache import RobotManifestCache
 from humanoid_robot.core.robot_telemetry_cache import RobotTelemetryCache
 from humanoid_robot.core.settings import CoreSettings
 from humanoid_robot.core.visit_journal import VisitJournal
+from humanoid_robot.core.wall_relay import WallCommandRelay
 from humanoid_robot.observability import PromMetrics
 from humanoid_robot.plugins_sdk import PluginRegistry
 from humanoid_robot.ports import EventBusPort, Subscription
@@ -69,9 +72,12 @@ class AppContainer:
     safety_tilt_monitor: TiltMonitor | None = field(default=None)
     safety_overheat_monitor: OverheatMonitor | None = field(default=None)
     robot_telemetry_cache: RobotTelemetryCache = field(default_factory=RobotTelemetryCache)
+    wall_client: WallHttpClient | None = field(default=None)
+    wall_relay: WallCommandRelay | None = field(default=None)
     _manifest_subscription: Subscription | None = field(default=None)
     _visit_subscription: Subscription | None = field(default=None)
     _dialogue_subscriptions: list[Subscription] = field(default_factory=list)
+    _event_journal_subscription: Subscription | None = field(default=None)
     _telemetry_subscription: Subscription | None = field(default=None)
 
     @classmethod
@@ -108,6 +114,9 @@ class AppContainer:
 
         # Full conversation history for the dashboard (survives reloads).
         dialogue_subscriptions = await DialogueJournal().start(bus)
+
+        # Bounded persisted tail of the whole bus for the dev console pages.
+        event_journal_subscription = await EventJournal().start(bus)
 
         diagnostics_ticker = DiagnosticsTicker(bus=bus)
         await diagnostics_ticker.start()
@@ -175,6 +184,17 @@ class AppContainer:
         )
         await tilt_monitor.start()
 
+        wall_client: WallHttpClient | None = None
+        wall_relay: WallCommandRelay | None = None
+        if settings.wall.enabled:
+            wall_client = WallHttpClient(
+                base_url=settings.wall.agent_url,
+                token=settings.wall.token,
+                timeout_s=settings.wall.timeout_s,
+            )
+            wall_relay = WallCommandRelay(bus=bus, wall=wall_client)
+            await wall_relay.start()
+
         overheat_monitor = OverheatMonitor(
             gate=safety_gate,
             bus=bus,
@@ -199,10 +219,13 @@ class AppContainer:
             safety_tilt_monitor=tilt_monitor,
             safety_overheat_monitor=overheat_monitor,
             robot_telemetry_cache=telemetry_cache,
+            wall_client=wall_client,
+            wall_relay=wall_relay,
             _manifest_subscription=manifest_subscription,
             _telemetry_subscription=telemetry_subscription,
             _visit_subscription=visit_subscription,
             _dialogue_subscriptions=dialogue_subscriptions,
+            _event_journal_subscription=event_journal_subscription,
         )
 
     async def close(self) -> None:
@@ -217,6 +240,10 @@ class AppContainer:
         if self.diagnostics_ticker is not None:
             await self.diagnostics_ticker.stop()
             self.diagnostics_ticker = None
+        if self.wall_relay is not None:
+            await self.wall_relay.stop()  # also closes wall_client's transport
+            self.wall_relay = None
+            self.wall_client = None
 
     async def _close_safety_stack(self) -> None:
         if self.safety_overheat_monitor is not None:
@@ -251,6 +278,10 @@ class AppContainer:
             with contextlib.suppress(Exception):
                 await sub.cancel()
         self._dialogue_subscriptions = []
+        if self._event_journal_subscription is not None:
+            with contextlib.suppress(Exception):
+                await self._event_journal_subscription.cancel()
+            self._event_journal_subscription = None
         if self._telemetry_subscription is not None:
             with contextlib.suppress(Exception):
                 await self._telemetry_subscription.cancel()

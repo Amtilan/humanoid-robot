@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 
-import { getAuthToken } from "../api/client";
+import { api, getAuthToken } from "../api/client";
 
 export interface EventEnvelope {
   subject: string;
@@ -133,6 +133,51 @@ export function useEventSubscription(
       if (match(envelope.subject)) handlerRef.current(envelope);
     });
   }, [subscribe, filter]);
+}
+
+/**
+ * Replay the robot-side persisted event tail (oldest-first) through
+ * `handler` once on mount — pages seed their state before live WS events
+ * arrive, so a refresh no longer starts from blank. Dedup against live
+ * events by `event_id` is the caller's responsibility (envelopes carry it).
+ */
+export function useEventHistory(
+  filter: string | ((subject: string) => boolean),
+  handler: Listener,
+  limit = 500,
+): void {
+  const handlerRef = useRef(handler);
+  handlerRef.current = handler;
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .eventsHistory(limit)
+      .then(({ records }) => {
+        if (cancelled) return;
+        const f = filterRef.current;
+        const match =
+          typeof f === "string" ? (s: string) => matchSubject(f, s) : f;
+        for (const envelope of records) {
+          if (match(envelope.subject)) {
+            try {
+              handlerRef.current(envelope);
+            } catch (err) {
+              console.error("history replay failed", err);
+            }
+          }
+        }
+      })
+      .catch(() => {
+        // History endpoint unavailable — live-only view still works.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [limit]);
 }
 
 function matchSubject(pattern: string, subject: string): boolean {
