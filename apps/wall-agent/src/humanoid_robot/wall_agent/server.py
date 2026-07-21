@@ -80,7 +80,7 @@ def make_handler(driver: WallDriver, token: str = "") -> type[BaseHTTPRequestHan
 def serve(
     driver: WallDriver,
     *,
-    host: str = "0.0.0.0",  # noqa: S104 — LAN appliance, token-gated
+    host: str = "0.0.0.0",  # noqa: S104 — LAN appliance, token-gated  # pragma: allowlist secret
     port: int = 8093,
     token: str = "",
 ) -> ThreadingHTTPServer:
