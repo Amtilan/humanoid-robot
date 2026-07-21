@@ -19,6 +19,7 @@ class Language(StrEnum):
 
     RU = "ru"
     EN = "en"
+    KK = "kk"
     UNKNOWN = "und"
 
 

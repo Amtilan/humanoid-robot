@@ -34,6 +34,7 @@ import { SafetyPage } from "./pages/SafetyPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { StatusPage } from "./pages/StatusPage";
 import { VoiceSessionsPage } from "./pages/VoiceSessionsPage";
+import { WallPage } from "./pages/WallPage";
 import { TabBar } from "./components/TabBar";
 import { MicActivity } from "./lib/micActivity";
 import { cn } from "./lib/cn";
@@ -143,6 +144,7 @@ export function App() {
         <Route path="/motions" element={<MotionsPage />} />
         <Route path="/status" element={<StatusPage />} />
         <Route path="/guard" element={<GuardPage />} />
+        <Route path="/wall" element={<WallPage />} />
         <Route path="/more" element={<MorePage />} />
       </Route>
       <Route element={<ConsoleLayout />}>

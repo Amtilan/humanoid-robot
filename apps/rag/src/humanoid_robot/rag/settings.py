@@ -73,6 +73,15 @@ class GuardSettings(BaseModel):
     kb_path: str = "/etc/humanoid-robot/guard-kb.yaml"
 
 
+class WallIntentSettings(BaseModel):
+    """Presenter mode — voice commands that drive the video wall."""
+
+    enabled: bool = False
+    # Customer overrides for aliases / spoken accompaniment texts; the
+    # built-in matrix (plan §5) applies when the file is absent.
+    config_path: str = "/etc/humanoid-robot/wall-intents.yaml"
+
+
 class RagRunnerSettings(BaseSettings):
     """Top-level RAG configuration."""
 
@@ -94,6 +103,7 @@ class RagRunnerSettings(BaseSettings):
     qa: QaSettings = QaSettings()
     conversation: ConversationSettings = ConversationSettings()
     guard: GuardSettings = GuardSettings()
+    wall: WallIntentSettings = WallIntentSettings()
     stack: RagStackSettings
 
     @classmethod

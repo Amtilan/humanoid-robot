@@ -20,6 +20,7 @@ from humanoid_robot.rag.guard_kb import GuardKb
 from humanoid_robot.rag.llm_config_sync import LlmConfigSync
 from humanoid_robot.rag.runner import QaOrchestrator, RagRunner
 from humanoid_robot.rag.settings import RagRunnerSettings, load_settings
+from humanoid_robot.rag.wall_intent import WallIntentMatcher
 
 
 def _load_guard_kb(s: RagRunnerSettings) -> GuardKb | None:
@@ -117,12 +118,17 @@ async def _serve(settings: RagRunnerSettings) -> None:
     guard_kb = _load_guard_kb(settings)
     orch = _build_orchestrator(composition, guard_kb)
     log.info("cortex-rag.mode", mode=composition.settings.mode)
+    wall_intent = None
+    if settings.wall.enabled:
+        wall_intent = WallIntentMatcher(config_path=settings.wall.config_path)
+        log.info("wall_intent.enabled", config_path=settings.wall.config_path)
     runner = RagRunner(
         orchestrator=orch,
         bus=composition.bus,
         producer=composition.settings.service_name,
         guard_intake_enabled=composition.settings.guard.intake_enabled,
         guard_kb=guard_kb,
+        wall_intent=wall_intent,
     )
     # Live local⇄cloud LLM switching from the app; the yaml values are the
     # local baseline to fall back to.

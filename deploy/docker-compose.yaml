@@ -66,6 +66,15 @@ services:
       HR_ROBOT_ADAPTER__ADAPTER_NAME: "mock"
       HR_ROBOT_ADAPTER__TELEMETRY_INTERVAL_S: "5"
 
+  # Video-wall control agent. In dev/autonomous testing this is the built-in
+  # simulator; in production the same app runs on the wall's Windows PC with
+  # --driver sendinput and core points at it via HR_WALL__AGENT_URL.
+  wall-agent:
+    <<: *python-base
+    command: ["cortex-wall-agent", "--driver", "sim", "--port", "8093"]
+    ports:
+      - "127.0.0.1:8093:8093"
+
   dashboard:
     build:
       context: ..
@@ -130,6 +139,7 @@ services:
       HR_RAG__NATS__SERVERS: '["nats://nats:4222"]'
     volumes:
       - ./config/rag.yaml:/etc/humanoid-robot/rag.yaml:ro
+      - ./config/wall-intents.yaml:/etc/humanoid-robot/wall-intents.yaml:ro
       - /var/lib/humanoid-robot/models:/var/lib/humanoid-robot/models:ro
       - rag-state:/var/lib/humanoid-robot
     depends_on:

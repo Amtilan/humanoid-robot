@@ -331,6 +331,15 @@ export const api = {
     payload: Record<string, unknown>;
     submitter?: string;
   }) => postJson<{ command_id: string }, typeof body>("/api/v1/robot/commands", body),
+  // Video-wall manual remote (presenter mode). Result arrives on the WS bus
+  // as wall.command.result, matched by command_id.
+  wallCommand: (body: {
+    kind: "open_section" | "navigate";
+    section?: string;
+    nav?: string;
+    submitter?: string;
+  }) => postJson<{ command_id: string }, typeof body>("/api/v1/wall/commands", body),
+  wallHealth: () => getJson<{ enabled: boolean; reachable: boolean }>("/api/v1/wall/health"),
   ragAsk: (body: RagAskRequest) => postJson<RagAskResponse, RagAskRequest>("/api/v1/rag/ask", body),
   ragAskStart: (body: RagAskRequest) =>
     postJson<{ session_id: string }, RagAskRequest>("/api/v1/rag/ask/start", body),

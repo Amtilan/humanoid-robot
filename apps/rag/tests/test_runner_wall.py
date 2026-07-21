@@ -12,7 +12,7 @@ from humanoid_robot.domain.voice import Language
 from humanoid_robot.domain.wall import WallCommandKind, WallSection
 from humanoid_robot.events import AsrFinal, LlmAnswer, WallCommandRequested
 from humanoid_robot.events.base import EventMetadata
-from humanoid_robot.rag.grounded_qa import GroundedQAResult
+from humanoid_robot.rag.grounded_qa import GroundedQAResult, RetrievalQualityVerdict
 from humanoid_robot.rag.runner import RagRunner
 from humanoid_robot.rag.wall_intent import WallIntentMatcher
 from humanoid_robot.testing import InMemoryEventBus
@@ -26,8 +26,8 @@ class _FakeOrchestrator:
         self.calls.append(question)
         return GroundedQAResult(
             answer=GroundedAnswer(answer="llm reply", citations=(), confidence=0.9),
-            rejection_reason=None,
-            fallback_text=None,
+            retrieval_verdict=RetrievalQualityVerdict.PASS,
+            grounding_verdict=None,
         )
 
 

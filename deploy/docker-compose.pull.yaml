@@ -77,6 +77,20 @@ services:
       - path: /etc/humanoid-robot/cortex-robot-adapter.env
         required: false
 
+  # Video-wall control agent (presenter deployments). Default = built-in
+  # simulator, so the whole voice → intent → wall pipeline is testable with
+  # no wall PC. When the real wall PC runs the agent, point core at it via
+  # HR_WALL__AGENT_URL in /etc/humanoid-robot/cortex-core.env — this service
+  # can keep running; it is only the fallback target.
+  wall-agent:
+    <<: *python-base
+    command: ["cortex-wall-agent", "--driver", "sim", "--port", "8093"]
+    environment:
+      HR_WALL_AGENT_TOKEN: "${HR_WALL_AGENT_TOKEN:-}"
+    env_file:
+      - path: /etc/humanoid-robot/cortex-wall-agent.env
+        required: false
+
   dashboard:
     image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_OWNER:-amtilan}/humanoid-robot-dashboard:${IMAGE_TAG:-main}
     restart: unless-stopped
@@ -170,6 +184,7 @@ services:
       HR_RAG__NATS__SERVERS: '["nats://nats:4222"]'
     volumes:
       - /etc/humanoid-robot/rag.yaml:/etc/humanoid-robot/rag.yaml:ro
+      - /etc/humanoid-robot/wall-intents.yaml:/etc/humanoid-robot/wall-intents.yaml:ro
       - /var/lib/humanoid-robot/models:/var/lib/humanoid-robot/models:ro
       - rag-state:/var/lib/humanoid-robot
     depends_on:

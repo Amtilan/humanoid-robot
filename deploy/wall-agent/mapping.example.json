@@ -1,0 +1,22 @@
+{
+  "_comment": "Карта действий агента видеостены (--driver sendinput). Клик задаётся нормализованными координатами экрана 0..1 (калибруются один раз на ПК видеостены на этапе интеграции). Слайды приложение листает клавишами PgDn/PgUp — это уже подтверждено анализом Factories.exe.",
+  "window_title": "Factories",
+  "step_delay_s": 0.15,
+  "actions": {
+    "navigate:next_slide": [{ "key": "pgdn" }],
+    "navigate:prev_slide": [{ "key": "pgup" }],
+    "navigate:main_menu": [{ "click": [0.03, 0.05] }],
+    "open_section:Avto1": [{ "click": [0.2, 0.3] }],
+    "open_section:Avto2": [{ "click": [0.2, 0.4] }],
+    "open_section:Avto3": [{ "click": [0.2, 0.5] }],
+    "open_section:Avto4": [{ "click": [0.2, 0.6] }],
+    "open_section:Avto5": [{ "click": [0.2, 0.7] }],
+    "open_section:JD1": [{ "click": [0.5, 0.3] }],
+    "open_section:JD2": [{ "click": [0.5, 0.4] }],
+    "open_section:JD3": [{ "click": [0.5, 0.5] }],
+    "open_section:Aero1": [{ "click": [0.8, 0.3] }],
+    "open_section:Aero2": [{ "click": [0.8, 0.4] }],
+    "open_section:Aero3": [{ "click": [0.8, 0.5] }],
+    "open_section:Aero4": [{ "click": [0.8, 0.6] }]
+  }
+}

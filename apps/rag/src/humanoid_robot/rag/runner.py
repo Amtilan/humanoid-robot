@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -27,6 +28,7 @@ from humanoid_robot.events import (
     LlmRejected,
     VisitCardCompleted,
     VisitIntakeStart,
+    WallCommandRequested,
 )
 from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.observability import get_logger
@@ -35,6 +37,7 @@ from humanoid_robot.rag.conversation import trim_incomplete_tail
 from humanoid_robot.rag.grounded_qa import GroundedQAResult
 from humanoid_robot.rag.guard_kb import GuardKb
 from humanoid_robot.rag.visit_intake import VisitIntake, wants_intake
+from humanoid_robot.rag.wall_intent import WallIntentMatch, WallIntentMatcher
 
 _LOG = get_logger("cortex-rag.runner")
 
@@ -67,6 +70,8 @@ class RagRunner:
     guard_intake_enabled: bool = False
     # Customer reference data; room/unit navigation answers are deterministic.
     guard_kb: GuardKb | None = None
+    # Presenter mode: voice commands that drive the video wall bypass the LLM.
+    wall_intent: WallIntentMatcher | None = None
     _intake: VisitIntake = field(default_factory=VisitIntake)
     _stop: asyncio.Event = field(default_factory=asyncio.Event)
     _subscription: Subscription | None = None
@@ -131,7 +136,9 @@ class RagRunner:
         if reply:
             await self._publish_answer_text(session_id=event.session_id, text=reply)
 
-    async def _publish_answer_text(self, *, session_id: str, text: str) -> None:
+    async def _publish_answer_text(
+        self, *, session_id: str, text: str, language: Language = Language.RU
+    ) -> None:
         """Publish a deterministic (non-LLM) spoken line as a normal
         llm.answer, so TTS and the dashboard treat it like any reply."""
         await self.bus.publish(
@@ -142,13 +149,44 @@ class RagRunner:
                 ),
                 session_id=session_id,  # type: ignore[arg-type]
                 text=text,
-                language=Language.RU,
+                language=language,
                 citations=(),
                 confidence=1.0,
             )
         )
 
+    async def _handle_wall_match(self, event: AsrFinal, match: WallIntentMatch) -> None:
+        """Deterministic wall command: request it and voice the accompaniment."""
+        command_id = str(uuid.uuid4())
+        await self.bus.publish(
+            WallCommandRequested(
+                meta=EventMetadata(
+                    correlation_id=new_correlation_id(),
+                    producer=self.producer,
+                ),
+                command_id=command_id,
+                command=match.command,
+                source="voice",
+                language=str(match.language.value),
+                utterance=event.text[:200],
+            )
+        )
+        _LOG.info(
+            "wall_intent.matched",
+            command=(match.command.section or match.command.nav),
+            text=event.text[:60],
+        )
+        await self._publish_answer_text(
+            session_id=event.session_id, text=match.speak, language=match.language
+        )
+
     async def _handle(self, event: AsrFinal) -> None:
+        # Presenter fast path: wall commands never reach the LLM.
+        if self.wall_intent is not None:
+            match = self.wall_intent.match(event.text)
+            if match is not None:
+                await self._handle_wall_match(event, match)
+                return
         # Security-desk interview intercepts the utterance before free chat.
         if self.guard_intake_enabled:
             if self._intake.engaged:

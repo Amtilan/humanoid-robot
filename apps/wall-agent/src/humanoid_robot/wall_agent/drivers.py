@@ -169,9 +169,11 @@ class SendInputWallDriver:
     name = "sendinput"
 
     def __init__(self, mapping_path: str) -> None:
-        import sys
+        import platform
 
-        if sys.platform != "win32":  # pragma: no cover — exercised on Windows only
+        # platform.system() (not sys.platform) so mypy does not narrow the
+        # rest of the class to unreachable on non-Windows checkers.
+        if platform.system() != "Windows":  # pragma: no cover — Windows only
             msg = "sendinput driver requires Windows"
             raise RuntimeError(msg)
         raw = json.loads(Path(mapping_path).read_text(encoding="utf-8"))
