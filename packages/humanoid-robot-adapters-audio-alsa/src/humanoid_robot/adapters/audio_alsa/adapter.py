@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import re
 import shutil
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -162,6 +164,51 @@ class AlsaAudioIn:
         return proc
 
 
+# Built-in Jetson/G1 sound cards that are never the operator's microphone.
+_BUILTIN_CARD_IDS = frozenset({"APE", "HDA", "NVIDIA"})
+
+# `/proc/asound/cards` format:  " 0 [SF777W         ]: USB-Audio - SF-777W"
+_PROC_CARD_RE = re.compile(r"^\s*\d+\s+\[(\w+)")
+# `arecord -l` format:          "card 0: SF777W [SF-777W], device 0: ..."
+_ARECORD_CARD_RE = re.compile(r"^card\s+\d+:\s+(\w+)\s")
+
+
+def resolve_auto_device(cards_text: str) -> str:
+    """Pick the first external (USB) capture card by NAME so the device
+    string keeps working across re-enumeration. Accepts both
+    ``/proc/asound/cards`` and ``arecord -l`` output."""
+    for line in cards_text.splitlines():
+        match = _PROC_CARD_RE.match(line) or _ARECORD_CARD_RE.match(line)
+        if match and match.group(1) not in _BUILTIN_CARD_IDS:
+            return f"plughw:CARD={match.group(1)}"
+    return "default"
+
+
+async def _resolve_device(device: str, arecord_path: str) -> str:
+    # ``device: auto`` re-resolves to the current USB mic at every (re)spawn,
+    # so swapping the microphone just works: the dead arecord respawns onto
+    # whatever card is plugged in now.
+    if device != "auto":
+        return device
+    try:
+        cards_text = Path("/proc/asound/cards").read_text(encoding="utf-8")
+    except OSError:
+        # In a container only /dev/snd is mapped, /proc/asound is absent —
+        # `arecord -l` enumerates capture cards via /dev/snd ioctls instead.
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                arecord_path,
+                "-l",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+            cards_text = stdout.decode(errors="replace")
+        except (OSError, TimeoutError):
+            return "default"
+    return resolve_auto_device(cards_text)
+
+
 class _ArecordProcessFactory:
     """Spawn an arecord subprocess. Subclassed in tests."""
 
@@ -176,7 +223,7 @@ class _DefaultArecordFactory(_ArecordProcessFactory):
         argv = [
             config.arecord_path,
             "-D",
-            config.device,
+            await _resolve_device(config.device, config.arecord_path),
             "-f",
             _format_flag(config),
             "-c",

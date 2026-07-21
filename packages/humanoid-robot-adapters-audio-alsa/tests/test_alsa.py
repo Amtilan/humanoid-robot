@@ -8,7 +8,10 @@ from dataclasses import dataclass, field
 import pytest
 
 from humanoid_robot.adapters.audio_alsa import AlsaAudioIn, AlsaAudioInConfig
-from humanoid_robot.adapters.audio_alsa.adapter import _ArecordProcessFactory
+from humanoid_robot.adapters.audio_alsa.adapter import (
+    _ArecordProcessFactory,
+    resolve_auto_device,
+)
 
 
 @dataclass(slots=True)
@@ -99,3 +102,41 @@ def test_flat_kwargs_config_builds() -> None:
     adapter = AlsaAudioIn(device="plughw:CARD=Device", sample_rate_hz=16000, channels=1)
     assert adapter.config.device == "plughw:CARD=Device"
     assert adapter.config.sample_rate_hz == 16000
+
+
+class TestResolveAutoDevice:
+    """`device: auto` picks the USB mic regardless of its card name."""
+
+    def test_picks_first_usb_card_by_name(self) -> None:
+        # Real /proc/asound/cards from the G1 Jetson with an SF-777W plugged in.
+        cards = (
+            " 0 [SF777W         ]: USB-Audio - SF-777W\n"
+            "                      Jieli Technology SF-777W\n"
+            " 1 [HDA            ]: tegra-hda - NVIDIA Jetson Orin NX HDA\n"
+            " 2 [APE            ]: tegra-ape - NVIDIA Jetson Orin NX APE\n"
+        )
+        assert resolve_auto_device(cards) == "plughw:CARD=SF777W"
+
+    def test_skips_builtin_cards(self) -> None:
+        cards = (
+            " 0 [HDA            ]: tegra-hda - NVIDIA Jetson Orin NX HDA\n"
+            " 1 [Device         ]: USB-Audio - USB Composite Device\n"
+        )
+        assert resolve_auto_device(cards) == "plughw:CARD=Device"
+
+    def test_no_usb_card_falls_back_to_default(self) -> None:
+        cards = " 0 [APE            ]: tegra-ape - NVIDIA Jetson Orin NX APE\n"
+        assert resolve_auto_device(cards) == "default"
+
+    def test_explicit_device_untouched(self) -> None:
+        adapter = AlsaAudioIn(device="auto")
+        assert adapter.config.device == "auto"
+
+    def test_parses_arecord_l_output(self) -> None:
+        # Containers see only /dev/snd (no /proc/asound) — `arecord -l` format.
+        cards = (
+            "**** List of CAPTURE Hardware Devices ****\n"
+            "card 0: SF777W [SF-777W], device 0: USB Audio [USB Audio]\n"
+            "card 2: APE [NVIDIA Jetson Orin NX APE], device 0: tegra-dlink-0\n"
+        )
+        assert resolve_auto_device(cards) == "plughw:CARD=SF777W"

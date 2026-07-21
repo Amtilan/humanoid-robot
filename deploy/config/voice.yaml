@@ -43,16 +43,16 @@ stack:
   # USB microphone via ALSA (arecord). The G1's built-in far-field mic
   # (over DDS multicast, name: unitree_g1) is far too quiet/noisy for
   # reliable ASR — a USB lavalier plugged into the Jetson gives a clean,
-  # loud signal (measured peak 32132/32767, perfect recognition). The USB
-  # sound card enumerates as ALSA card name "Device"; plughw:CARD=Device
-  # targets it by name so it survives card-number reshuffles. The voice
-  # container needs /dev/snd + alsa-utils (see docker-compose.unitree.yaml
-  # and adapter-unitree.Dockerfile). Swap back to unitree_g1 to use the
-  # built-in mic.
+  # loud signal (measured peak 32132/32767, perfect recognition). "auto"
+  # picks the first non-built-in (USB) capture card by NAME at every
+  # arecord (re)spawn, so swapping the mic just works — no config edit,
+  # no restart. The voice container needs /dev/snd + alsa-utils (see
+  # docker-compose.unitree.yaml and adapter-unitree.Dockerfile). Swap back
+  # to unitree_g1 to use the built-in mic.
   audio_in:
     name: alsa
     config:
-      device: "plughw:CARD=Device"
+      device: auto
       sample_rate_hz: 16000
       channels: 1
   # G1 speaker via the vendor SDK AudioClient; inits DDS on eth10 on first
