@@ -33,7 +33,7 @@ def _adapter(seen: list[dict[str, object]]) -> CloudTts:
     return CloudTts(
         CloudTtsConfig(
             base_url="https://tts.example",
-            api_key="test-key",
+            api_key="test-key",  # pragma: allowlist secret
             voices={"ru": "marina", "kk": "madi"},
         ),
         transport=httpx.MockTransport(handler),
