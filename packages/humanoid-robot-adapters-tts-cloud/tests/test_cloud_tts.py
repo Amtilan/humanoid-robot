@@ -71,7 +71,7 @@ async def test_http_error_raises() -> None:
         return httpx.Response(401, text="bad key")
 
     adapter = CloudTts(
-        CloudTtsConfig(base_url="https://tts.example", api_key="k"),
+        CloudTtsConfig(base_url="https://tts.example", api_key="k"),  # pragma: allowlist secret
         transport=httpx.MockTransport(handler),
     )
     with pytest.raises(httpx.HTTPStatusError):
