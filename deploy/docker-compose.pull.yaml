@@ -186,6 +186,8 @@ services:
       - /etc/humanoid-robot/rag.yaml:/etc/humanoid-robot/rag.yaml:ro
       - /etc/humanoid-robot/wall-intents.yaml:/etc/humanoid-robot/wall-intents.yaml:ro
       - /etc/humanoid-robot/presenter-kb.yaml:/etc/humanoid-robot/presenter-kb.yaml:ro
+      # Guard-desk reference data (rooms/FAQ) — the visit-intake robot's KB.
+      - /etc/humanoid-robot/guard-kb.yaml:/etc/humanoid-robot/guard-kb.yaml:ro
       - /var/lib/humanoid-robot/models:/var/lib/humanoid-robot/models:ro
       - rag-state:/var/lib/humanoid-robot
     depends_on:
