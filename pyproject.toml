@@ -136,7 +136,6 @@ ignore = [
 # Russian/Kazakh spoken lines and alias tables of the video-wall command matrix.
 "apps/rag/src/humanoid_robot/rag/wall_intent.py" = ["RUF001", "RUF002", "RUF003"]
 "apps/rag/tests/test_wall_intent.py" = ["RUF001"]
-"apps/rag/tests/test_runner_wall.py" = ["RUF001"]
 "apps/rag/src/humanoid_robot/rag/guard_kb.py" = ["RUF001", "RUF002", "RUF003"]
 "apps/rag/src/humanoid_robot/rag/runner.py" = ["RUF003"]
 "apps/rag/tests/test_visit_intake.py" = ["RUF001"]
@@ -144,6 +143,12 @@ ignore = [
 "apps/rag/tests/test_guard_kb.py" = ["RUF001"]
 "apps/core/tests/test_visit_journal.py" = ["RUF001"]
 "apps/core/tests/test_event_journal.py" = ["RUF001"]
+# wall-agent runs on the wall PC and drives Win32/Unity input: untyped OS
+# handles (ANN401), a stdlib HTTP handler (C901) and a test token (S106).
+"apps/wall-agent/src/humanoid_robot/wall_agent/drivers.py" = ["ANN401"]
+"apps/wall-agent/src/humanoid_robot/wall_agent/server.py" = ["ANN401", "C901"]
+"apps/rag/tests/test_runner_wall.py" = ["S106", "RUF001"]
+"apps/wall-agent/tests/test_server.py" = ["S106"]
 "packages/humanoid-robot-adapters-wakeword-openwakeword/src/humanoid_robot/adapters/wakeword_openwakeword/adapter.py" = ["ANN401"]
 "apps/voice/src/humanoid_robot/voice/__main__.py" = ["B008"]
 "apps/voice/src/humanoid_robot/voice/composition.py" = ["ANN401"]

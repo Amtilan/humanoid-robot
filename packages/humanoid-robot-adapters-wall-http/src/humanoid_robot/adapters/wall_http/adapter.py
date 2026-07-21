@@ -62,9 +62,7 @@ class WallHttpClient:
 
     async def health(self) -> bool:
         try:
-            response = await self._client.get(
-                f"{self._base_url}/healthz", headers=self._headers()
-            )
+            response = await self._client.get(f"{self._base_url}/healthz", headers=self._headers())
         except httpx.HTTPError:
             return False
         return response.status_code == httpx.codes.OK

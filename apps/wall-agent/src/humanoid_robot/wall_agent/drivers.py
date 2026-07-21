@@ -152,13 +152,13 @@ class SendInputWallDriver:
     The action map is a JSON file calibrated on-site::
 
         {
-          "window_title": "Factories",
-          "actions": {
-            "open_section:Avto1": [{"click": [0.25, 0.40]}],
-            "navigate:main_menu": [{"click": [0.03, 0.05]}],
-            "navigate:next_slide": [{"key": "pgdn"}],
-            "navigate:prev_slide": [{"key": "pgup"}]
-          }
+            "window_title": "Factories",
+            "actions": {
+                "open_section:Avto1": [{"click": [0.25, 0.40]}],
+                "navigate:main_menu": [{"click": [0.03, 0.05]}],
+                "navigate:next_slide": [{"key": "pgdn"}],
+                "navigate:prev_slide": [{"key": "pgup"}],
+            },
         }
 
     Each action list is replayed in order; entries are ``{"key": name}``,

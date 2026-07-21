@@ -22,9 +22,7 @@ log = logging.getLogger(__name__)
 _MAX_BODY_BYTES = 64 * 1024
 
 
-def make_handler(
-    driver: WallDriver, token: str = ""
-) -> type[BaseHTTPRequestHandler]:
+def make_handler(driver: WallDriver, token: str = "") -> type[BaseHTTPRequestHandler]:
     """Build a request handler bound to a driver instance."""
 
     class Handler(BaseHTTPRequestHandler):
@@ -43,7 +41,7 @@ def make_handler(
                 return True
             return self.headers.get("X-Wall-Token", "") == token
 
-        def do_GET(self) -> None:  # noqa: N802 — stdlib http.server API
+        def do_GET(self) -> None:
             if not self._authorized():
                 self._send_json(401, {"error": "unauthorized"})
                 return
@@ -54,7 +52,7 @@ def make_handler(
             else:
                 self._send_json(404, {"error": "not found"})
 
-        def do_POST(self) -> None:  # noqa: N802 — stdlib http.server API
+        def do_POST(self) -> None:
             if not self._authorized():
                 self._send_json(401, {"error": "unauthorized"})
                 return
@@ -73,7 +71,7 @@ def make_handler(
             result = driver.execute(command)
             self._send_json(200, result.model_dump(mode="json"))
 
-        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+        def log_message(self, format: str, *args: Any) -> None:
             log.info("%s %s", self.address_string(), format % args)
 
     return Handler
