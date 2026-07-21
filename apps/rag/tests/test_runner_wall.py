@@ -100,3 +100,39 @@ async def test_greeting_on_visitor_with_cooldown() -> None:
     await runner._on_visitor_detected(_visitor())
     greetings = [e for e in bus.published if isinstance(e, LlmAnswer)]
     assert len(greetings) == 2
+
+
+async def test_fact_question_answers_instead_of_switching() -> None:
+    """«Какая протяжённость дороги X?» must answer the fact, not open the
+    section (the intent matcher must not steal fact questions)."""
+    import asyncio as _asyncio
+
+    from humanoid_robot.rag.presenter_kb import PresenterKb
+    from humanoid_robot.testing import InMemoryEventBus
+
+    bus = InMemoryEventBus()
+    kb = PresenterKb(
+        sections={
+            "Avto1": {
+                "name_ru": "автодорога Кызылорда — Жезказган",
+                "length_ru": "208 км",
+            }
+        }
+    )
+    runner = RagRunner(
+        orchestrator=_FakeOrchestrator(),
+        bus=bus,
+        wall_intent=WallIntentMatcher(),
+        presenter_kb=kb,
+    )
+    task = _asyncio.create_task(runner.run())
+    await _asyncio.sleep(0)
+    await bus.publish(_asr("Какая протяжённость дороги Кызылорда — Жезказган?"))
+    await _asyncio.sleep(0.05)
+
+    walls = [e for e in bus.published if isinstance(e, WallCommandRequested)]
+    answers = [e for e in bus.published if isinstance(e, LlmAnswer)]
+    assert walls == []
+    assert any("208" in a.text for a in answers)
+    runner.request_stop()
+    await task

@@ -215,11 +215,10 @@ class RagRunner:
     async def _try_presenter(self, event: AsrFinal) -> bool:
         """Presenter fast paths: wall commands and exact project facts never
         reach the LLM. True when the utterance was fully handled."""
-        if self.wall_intent is not None:
-            match = self.wall_intent.match(event.text)
-            if match is not None:
-                await self._handle_wall_match(event, match)
-                return True
+        # Facts first: «какая протяжённость дороги X?» must ANSWER, not
+        # switch the wall — kb.lookup only fires on fact keywords
+        # (протяжённость/подрядчик/срок/статус), so plain «покажи X»
+        # commands still fall through to the intent matcher below.
         if self.presenter_kb is not None:
             fact = self.presenter_kb.lookup(event.text)
             if fact is not None:
@@ -229,6 +228,11 @@ class RagRunner:
                     text=fact,
                     language=self._language_for_response(event.language),
                 )
+                return True
+        if self.wall_intent is not None:
+            match = self.wall_intent.match(event.text)
+            if match is not None:
+                await self._handle_wall_match(event, match)
                 return True
         return False
 
