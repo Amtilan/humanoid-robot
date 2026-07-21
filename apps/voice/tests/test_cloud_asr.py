@@ -67,7 +67,9 @@ async def test_cloud_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_cloud(monkeypatch, handler)
     local = _FakeLocalAsr()
     asr = SwitchableAsr(local)
-    asr.reconfigure_cloud(base_url="https://api.openai.com/", api_key="sk-test")
+    asr.reconfigure_cloud(
+        base_url="https://api.openai.com/", api_key="sk-test"
+    )  # pragma: allowlist secret
 
     result = await asr.transcribe_batch(
         b"\x00\x00" * 100, sample_rate_hz=16000, language_hint=Language.RU
@@ -85,7 +87,9 @@ async def test_cloud_failure_falls_back_to_local(monkeypatch: pytest.MonkeyPatch
     _patch_cloud(monkeypatch, handler)
     local = _FakeLocalAsr()
     asr = SwitchableAsr(local)
-    asr.reconfigure_cloud(base_url="https://api.deepseek.com", api_key="sk-x")
+    asr.reconfigure_cloud(
+        base_url="https://api.deepseek.com", api_key="sk-x"
+    )  # pragma: allowlist secret
 
     result = await asr.transcribe_batch(b"\x00\x00", sample_rate_hz=16000)
     assert result.text == "локально"
@@ -99,7 +103,9 @@ async def test_reset_local_disables_cloud(monkeypatch: pytest.MonkeyPatch) -> No
     _patch_cloud(monkeypatch, handler)
     local = _FakeLocalAsr()
     asr = SwitchableAsr(local)
-    asr.reconfigure_cloud(base_url="https://api.openai.com", api_key="sk-test")
+    asr.reconfigure_cloud(
+        base_url="https://api.openai.com", api_key="sk-test"
+    )  # pragma: allowlist secret
     asr.reset_local()
 
     result = await asr.transcribe_batch(b"\x00\x00", sample_rate_hz=16000)
