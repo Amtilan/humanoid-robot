@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 
 from humanoid_robot.core.container import AppContainer
@@ -48,6 +48,10 @@ class WallCommandResponse(BaseModel):
 @router.post("/commands", response_model=WallCommandResponse)
 async def submit_wall_command(body: WallCommandRequest, request: Request) -> WallCommandResponse:
     container: AppContainer = request.app.state.container
+    if container.wall_relay is None:
+        # Non-presenter robot: no relay is wired, so a published request
+        # would never execute — refuse instead of silently accepting.
+        raise HTTPException(status_code=503, detail="wall integration is disabled on this robot")
     command = WallCommand(kind=body.kind, section=body.section, nav=body.nav)
     command_id = str(uuid.uuid4())
     await container.event_bus.publish(
