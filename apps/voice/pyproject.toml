@@ -10,6 +10,7 @@ dependencies = [
     "pydantic-settings>=2.6",
     "typer>=0.15",
     "PyYAML>=6.0",
+    "httpx>=0.27",
     "humanoid-robot-domain",
     "humanoid-robot-events",
     "humanoid-robot-ports",

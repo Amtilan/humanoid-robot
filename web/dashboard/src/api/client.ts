@@ -66,10 +66,13 @@ export function robotCameraSnapshotUrl(cameraId = "front"): string {
   return withToken(`/api/v1/robot/camera/${encodeURIComponent(cameraId)}/snapshot`);
 }
 
-// Live mic monitor (streaming WAV from the robot's head mic). The raw feed is
-// very quiet, so a software gain is applied server-side via ?gain=.
-export function robotMicStreamUrl(gain = 20): string {
-  const qs = new URLSearchParams({ gain: String(gain) });
+// Live mic monitor (streaming WAV). source "usb" = the ASR microphone the
+// robot actually listens to; "builtin" = the quiet G1 head mic (server-side
+// ?gain= amplifies it).
+export type MicSource = "usb" | "builtin";
+
+export function robotMicStreamUrl(gain: number, source: MicSource = "usb"): string {
+  const qs = new URLSearchParams({ gain: String(gain), source });
   const token = getAuthToken();
   if (token) qs.set("token", token);
   return `/api/v1/robot/mic/stream?${qs.toString()}`;

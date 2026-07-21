@@ -122,7 +122,9 @@ export function LlmSwitcher() {
           </div>
           <p className="text-xs text-muted-foreground">
             Подходит любой OpenAI-совместимый сервис (OpenAI, DeepSeek,
-            OpenRouter). Токен хранится только на роботе. Нужен интернет.
+            OpenRouter). Токен хранится только на роботе. Нужен интернет. Если у провайдера есть
+            Whisper (OpenAI), робот будет и распознавать речь через облако — точнее и быстрее;
+            иначе распознавание останется локальным.
           </p>
         </div>
       )}

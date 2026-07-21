@@ -15,10 +15,15 @@ Runs until `.request_stop()` is called or the mic stream ends.
 from __future__ import annotations
 
 import asyncio
+import base64
+import contextlib
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
-from humanoid_robot.domain.shared import SessionId, new_session_id
+from humanoid_robot.domain.shared import SessionId, new_correlation_id, new_session_id
+from humanoid_robot.events import AudioMonitorControl, AudioMonitorFrame, BaseEvent
+from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.observability import get_logger
 from humanoid_robot.ports import (
     AsrPort,
@@ -53,6 +58,10 @@ class VoiceRunner:
     speak_all: bool = False
     _stop: asyncio.Event = field(default_factory=asyncio.Event)
     _tts_sub: Subscription | None = None
+    # Mic mirroring for the app's "robot's hearing" monitor: frames are
+    # published to the bus only while a monitor client keeps the tap alive.
+    _monitor_sub: Subscription | None = None
+    _monitor_until: float = 0.0
 
     def request_stop(self) -> None:
         self._stop.set()
@@ -67,6 +76,9 @@ class VoiceRunner:
             speak_all=self.speak_all,
         )
         self._tts_sub = await speaker.start()
+        self._monitor_sub = await self.bus.subscribe(
+            AudioMonitorControl.subject, self._on_monitor_control
+        )
         _LOG.info("voice_runner.ready", session_id=self.session_id)
 
         session_task = asyncio.create_task(self._session_loop(speaker), name="voice-session")
@@ -87,6 +99,8 @@ class VoiceRunner:
                 _LOG.exception("voice_session task exited with error")
             if self._tts_sub is not None:
                 await self._tts_sub.cancel()
+            if self._monitor_sub is not None:
+                await self._monitor_sub.cancel()
             await self.audio_in.close()
 
     async def _session_loop(self, speaker: TtsSpeaker) -> None:
@@ -114,8 +128,31 @@ class VoiceRunner:
             _LOG.warning("voice_session.mic_stream_ended_restarting")
             await asyncio.sleep(1.0)
 
+    async def _on_monitor_control(self, event: BaseEvent) -> None:
+        if not isinstance(event, AudioMonitorControl):
+            return
+        self._monitor_until = (
+            time.monotonic() + max(1.0, min(120.0, event.ttl_s)) if event.enabled else 0.0
+        )
+
+    async def _mirror_frame(self, frame: AudioFrame) -> None:
+        with contextlib.suppress(Exception):
+            await self.bus.publish(
+                AudioMonitorFrame(
+                    meta=EventMetadata(
+                        correlation_id=new_correlation_id(),
+                        producer=self.config.producer,
+                    ),
+                    pcm_b64=base64.b64encode(frame.pcm).decode(),
+                    sample_rate_hz=frame.format.sample_rate_hz,
+                    channels=frame.format.channels,
+                )
+            )
+
     async def _mic_stream(self) -> AsyncIterator[AudioFrame]:
         async for frame in self.audio_in.stream():
             if self._stop.is_set():
                 return
+            if time.monotonic() < self._monitor_until:
+                await self._mirror_frame(frame)
             yield frame

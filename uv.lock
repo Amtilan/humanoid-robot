@@ -2308,6 +2308,7 @@ name = "humanoid-robot-voice"
 version = "0.0.0"
 source = { editable = "apps/voice" }
 dependencies = [
+    { name = "httpx" },
     { name = "humanoid-robot-adapters-asr-whisper" },
     { name = "humanoid-robot-adapters-audio-alsa" },
     { name = "humanoid-robot-adapters-audio-null" },
@@ -2328,6 +2329,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.27" },
     { name = "humanoid-robot-adapters-asr-whisper", editable = "packages/humanoid-robot-adapters-asr-whisper" },
     { name = "humanoid-robot-adapters-audio-alsa", editable = "packages/humanoid-robot-adapters-audio-alsa" },
     { name = "humanoid-robot-adapters-audio-null", editable = "packages/humanoid-robot-adapters-audio-null" },

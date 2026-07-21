@@ -26,6 +26,8 @@ from humanoid_robot.events.system import (
 )
 from humanoid_robot.events.voice import (
     AsrFinal,
+    AudioMonitorControl,
+    AudioMonitorFrame,
     AsrPartial,
     LlmAnswer,
     LlmAnswerToken,
@@ -41,6 +43,8 @@ from humanoid_robot.events.voice import (
 __all__ = [
     "AsrFinal",
     "AsrPartial",
+    "AudioMonitorControl",
+    "AudioMonitorFrame",
     "BaseEvent",
     "EventMetadata",
     "LlmAnswer",

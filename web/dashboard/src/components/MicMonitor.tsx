@@ -1,24 +1,38 @@
 import { useEffect, useRef, useState } from "react";
 import { Ear, Square } from "lucide-react";
 
-import { robotMicStreamUrl } from "../api/client";
+import { robotMicStreamUrl, type MicSource } from "../api/client";
 import { cn } from "../lib/cn";
 
-const GAINS = [
-  { value: 5, label: "Тихо" },
-  { value: 20, label: "Обычно" },
-  { value: 60, label: "Громко" },
+// The USB lavalier is loud; the built-in head mic needs heavy gain.
+const GAINS: Record<MicSource, { value: number; label: string }[]> = {
+  usb: [
+    { value: 1, label: "Тихо" },
+    { value: 2, label: "Обычно" },
+    { value: 5, label: "Громко" },
+  ],
+  builtin: [
+    { value: 5, label: "Тихо" },
+    { value: 20, label: "Обычно" },
+    { value: 60, label: "Громко" },
+  ],
+};
+
+const SOURCES: { value: MicSource; label: string }[] = [
+  { value: "usb", label: "Петличка (USB)" },
+  { value: "builtin", label: "Встроенный" },
 ];
 
 /**
- * "Robot's hearing" — plays the live head-mic stream (unbounded WAV over
- * HTTP). Stop must fully detach the src so the browser closes the connection
- * instead of buffering the stream in the background.
+ * "Robot's hearing" — plays a live mic stream (unbounded WAV over HTTP).
+ * Source "usb" mirrors the microphone ASR listens to. Stop must fully detach
+ * the src so the browser closes the connection instead of buffering.
  */
 export function MicMonitor({ className }: { className?: string }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [gain, setGain] = useState(20);
+  const [source, setSource] = useState<MicSource>("usb");
+  const [gain, setGain] = useState(GAINS.usb[1].value);
   const [error, setError] = useState(false);
 
   const stop = () => {
@@ -31,15 +45,26 @@ export function MicMonitor({ className }: { className?: string }) {
     setPlaying(false);
   };
 
-  const play = (g = gain) => {
+  const play = (g = gain, s = source) => {
     const audio = audioRef.current;
     if (!audio) return;
     setError(false);
-    audio.src = robotMicStreamUrl(g);
+    audio.src = robotMicStreamUrl(g, s);
     void audio.play().then(
       () => setPlaying(true),
       () => setError(true),
     );
+  };
+
+  const switchSource = (s: MicSource) => {
+    if (s === source) return;
+    const g = GAINS[s][1].value;
+    setSource(s);
+    setGain(g);
+    if (playing) {
+      stop();
+      play(g, s);
+    }
   };
 
   useEffect(() => stop, []);
@@ -52,7 +77,7 @@ export function MicMonitor({ className }: { className?: string }) {
           Слух робота
         </div>
         <div className="flex overflow-hidden rounded-full border border-border text-xs">
-          {GAINS.map(({ value, label }) => (
+          {GAINS[source].map(({ value, label }) => (
             <button
               key={value}
               type="button"
@@ -72,6 +97,22 @@ export function MicMonitor({ className }: { className?: string }) {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="mt-3 flex overflow-hidden rounded-lg border border-border text-xs">
+        {SOURCES.map(({ value, label }) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => switchSource(value)}
+            className={cn(
+              "flex-1 px-2 py-1.5",
+              source === value ? "bg-accent text-accent-foreground" : "text-muted-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <button
@@ -97,7 +138,8 @@ export function MicMonitor({ className }: { className?: string }) {
         </p>
       ) : (
         <p className="mt-2 text-xs text-muted-foreground">
-          Звук отстаёт на несколько секунд — это нормально.
+          «Петличка» — микрофон, который робот слушает. Звук отстаёт на несколько секунд — это
+          нормально.
         </p>
       )}
 

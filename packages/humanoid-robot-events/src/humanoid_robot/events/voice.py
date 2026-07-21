@@ -125,6 +125,32 @@ class VoiceInterrupt(BaseEvent):
     reason: str = "operator"
 
 
+class AudioMonitorControl(BaseEvent):
+    """A monitor client wants the ASR mic mirrored onto the bus.
+
+    Sent as a keepalive while someone is listening; the voice service stops
+    publishing frames once ``ttl_s`` elapses without a fresh one, so an
+    abandoned stream can't leave the tap running forever.
+    """
+
+    subject: ClassVar[str] = "audio.monitor.control"
+    schema_version: ClassVar[int] = 1
+
+    enabled: bool = True
+    ttl_s: float = 30.0
+
+
+class AudioMonitorFrame(BaseEvent):
+    """One captured mic frame, mirrored for live monitoring (base64 PCM16)."""
+
+    subject: ClassVar[str] = "audio.monitor.frame"
+    schema_version: ClassVar[int] = 1
+
+    pcm_b64: str
+    sample_rate_hz: int = 16_000
+    channels: int = 1
+
+
 class TtsSynthesisStarted(BaseEvent):
     """TTS started producing audio for an utterance."""
 

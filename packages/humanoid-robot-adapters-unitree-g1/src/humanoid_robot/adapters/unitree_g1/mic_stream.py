@@ -12,15 +12,22 @@ the multicast on eth10 is reachable.
         --interface-ip 192.168.123.164 --port 8092
 
 Routes:
-    GET /mic/stream?gain=N  -> streaming audio/wav (gain default 20x — the raw
-                               mic is quiet; amplify so faint audio is audible)
+    GET /mic/stream?source=usb&gain=N
+        -> streaming audio/wav of the USB (ASR) microphone, mirrored onto the
+           NATS bus by the voice service while we keep the tap alive. This is
+           what the robot actually LISTENS to; default source.
+    GET /mic/stream?source=builtin&gain=N
+        -> the G1 built-in head mic (DDS multicast). Quiet — gain default 20x.
     GET /healthz            -> 200
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
+import base64
 import contextlib
+import json
 import logging
 import os
 import socket
@@ -35,7 +42,16 @@ _GROUP = "239.168.123.161"  # pragma: allowlist secret
 _PORT = 5555
 _SAMPLE_RATE = 16_000
 _DEFAULT_GAIN = 20.0
+_USB_DEFAULT_GAIN = 1.0
 _RECV_BYTES = 8192
+
+# The voice service (host net) mirrors mic frames while we keep the tap
+# alive with control keepalives; see AudioMonitorControl/AudioMonitorFrame.
+_NATS_URL = os.environ.get("HR_MIC_NATS_URL", "nats://127.0.0.1:4222")
+_FRAME_SUBJECT = "audio.monitor.frame"
+_CONTROL_SUBJECT = "audio.monitor.control"
+_KEEPALIVE_S = 10.0
+_TAP_TTL_S = 30.0
 
 
 def _join_multicast(interface_ip: str) -> socket.socket:
@@ -104,12 +120,17 @@ def _make_handler(interface_ip: str, token: str) -> type[BaseHTTPRequestHandler]
             if not parsed.path.endswith("/stream"):
                 self._text(404, "not found")
                 return
-            gain = _DEFAULT_GAIN
-            q = parse_qs(parsed.query).get("gain")
+            query = parse_qs(parsed.query)
+            source = query.get("source", ["usb"])[0]
+            gain = _USB_DEFAULT_GAIN if source == "usb" else _DEFAULT_GAIN
+            q = query.get("gain")
             if q:
                 with contextlib.suppress(ValueError):
                     gain = max(1.0, min(500.0, float(q[0])))
-            self._serve_stream(gain)
+            if source == "usb":
+                self._serve_usb(gain)
+            else:
+                self._serve_stream(gain)
 
         def _serve_stream(self, gain: float) -> None:
             self.send_response(200)
@@ -131,6 +152,19 @@ def _make_handler(interface_ip: str, token: str) -> type[BaseHTTPRequestHandler]
             finally:
                 sock.close()
 
+        def _serve_usb(self, gain: float) -> None:
+            """Stream the USB (ASR) mic mirrored onto the bus by the voice
+            service. We keep the tap alive with periodic control events."""
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/wav")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            try:
+                asyncio.run(_pump_usb(self.wfile, gain))
+            except (BrokenPipeError, ConnectionResetError):
+                return
+
         def _text(self, code: int, msg: str) -> None:
             body = msg.encode()
             self.send_response(code)
@@ -140,6 +174,53 @@ def _make_handler(interface_ip: str, token: str) -> type[BaseHTTPRequestHandler]
             self.wfile.write(body)
 
     return Handler
+
+
+async def _pump_usb(wfile: Any, gain: float) -> None:
+    # Local imports: the builtin (DDS) path stays pure-stdlib.
+    import nats
+
+    from humanoid_robot.domain.shared import new_correlation_id
+    from humanoid_robot.events import AudioMonitorControl
+    from humanoid_robot.events.base import EventMetadata
+
+    nc = await nats.connect(_NATS_URL)
+    queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=64)
+
+    async def on_frame(msg: Any) -> None:
+        with contextlib.suppress(Exception):
+            pcm = base64.b64decode(json.loads(msg.data)["pcm_b64"])
+            if queue.full():
+                with contextlib.suppress(asyncio.QueueEmpty):
+                    queue.get_nowait()  # drop oldest, keep realtime
+            queue.put_nowait(pcm)
+
+    async def keep_tap_alive() -> None:
+        while True:
+            event = AudioMonitorControl(
+                meta=EventMetadata(correlation_id=new_correlation_id(), producer="g1-mic-monitor"),
+                enabled=True,
+                ttl_s=_TAP_TTL_S,
+            )
+            with contextlib.suppress(Exception):
+                await nc.publish(_CONTROL_SUBJECT, event.model_dump_json().encode())
+            await asyncio.sleep(_KEEPALIVE_S)
+
+    sub = await nc.subscribe(_FRAME_SUBJECT, cb=on_frame)
+    keepalive = asyncio.create_task(keep_tap_alive())
+    try:
+        wfile.write(_streaming_wav_header())
+        while True:
+            try:
+                pcm = await asyncio.wait_for(queue.get(), timeout=2.0)
+            except TimeoutError:
+                continue
+            wfile.write(_apply_gain(pcm, gain))
+    finally:
+        keepalive.cancel()
+        with contextlib.suppress(Exception):
+            await sub.unsubscribe()
+            await nc.close()
 
 
 def serve(interface_ip: str, port: int, token: str = "") -> None:

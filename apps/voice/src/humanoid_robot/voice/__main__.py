@@ -9,6 +9,8 @@ from pathlib import Path
 import typer
 
 from humanoid_robot.observability import configure_logging, get_logger
+from humanoid_robot.voice.asr_config_sync import AsrConfigSync
+from humanoid_robot.voice.cloud_asr import SwitchableAsr
 from humanoid_robot.voice.composition import VoiceComposition
 from humanoid_robot.voice.runner import VoiceRunner
 from humanoid_robot.voice.session import VoiceSessionConfig
@@ -60,11 +62,16 @@ async def _serve(settings: object) -> None:
         wake_name_mode=composition.settings.session.wake_name_mode,
         producer=composition.settings.service_name,
     )
+    # Cloud transcription rides the same app-configured token as the LLM;
+    # local whisper remains the fallback for every utterance.
+    asr = SwitchableAsr(composition.asr)
+    asr_sync = AsrConfigSync(asr)
+    asr_sync_sub = await asr_sync.start(composition.bus)
     runner = VoiceRunner(
         audio_in=composition.audio_in,
         audio_out=composition.audio_out,
         vad=composition.vad,
-        asr=composition.asr,
+        asr=asr,
         tts=composition.tts,
         bus=composition.bus,
         wake_word=composition.wake_word,
@@ -78,6 +85,7 @@ async def _serve(settings: object) -> None:
     try:
         await runner.run()
     finally:
+        await asr_sync_sub.cancel()
         await composition.bus.close()
 
 
