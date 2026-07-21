@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { NavLink } from "react-router-dom";
-import { Activity, Hand, Home, Menu, Shield } from "lucide-react";
+import { Activity, Hand, Home, Menu, MonitorPlay, Shield } from "lucide-react";
 
 import { api } from "../api/client";
 import { cn } from "../lib/cn";
@@ -14,13 +14,19 @@ const BASE_TABS = [
 // Role-specific tabs: the guard customer sees the visit journal, the
 // presenter customer never does (and vice versa for future presenter tabs).
 const GUARD_TAB = { to: "/guard", label: "Охрана", icon: Shield };
+const WALL_TAB = { to: "/wall", label: "Стена", icon: MonitorPlay };
 const MORE_TAB = { to: "/more", label: "Ещё", icon: Menu };
 
 /** Bottom tab bar for the owner-facing screens (app-like on every viewport). */
 export function TabBar() {
   const info = useQuery({ queryKey: ["system", "info"], queryFn: api.info, staleTime: 60_000 });
   const role = info.data?.role ?? "generic";
-  const tabs = [...BASE_TABS, ...(role === "guard" ? [GUARD_TAB] : []), MORE_TAB];
+  const tabs = [
+    ...BASE_TABS,
+    ...(role === "guard" ? [GUARD_TAB] : []),
+    ...(role === "presenter" ? [WALL_TAB] : []),
+    MORE_TAB,
+  ];
   return (
     <nav
       className={cn(

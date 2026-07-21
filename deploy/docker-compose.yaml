@@ -71,6 +71,7 @@ services:
   # --driver sendinput and core points at it via HR_WALL__AGENT_URL.
   wall-agent:
     <<: *python-base
+    profiles: ["wall"]
     command: ["cortex-wall-agent", "--driver", "sim", "--port", "8093"]
     ports:
       - "127.0.0.1:8093:8093"

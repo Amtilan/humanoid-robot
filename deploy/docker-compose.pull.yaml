@@ -84,6 +84,9 @@ services:
   # can keep running; it is only the fallback target.
   wall-agent:
     <<: *python-base
+    # Presenter-only: the built-in simulator for demos/tests. On site the
+    # real agent runs on the wall PC instead (HR_WALL__AGENT_URL points there).
+    profiles: ["wall"]
     command: ["cortex-wall-agent", "--driver", "sim", "--port", "8093"]
     environment:
       HR_WALL_AGENT_TOKEN: "${HR_WALL_AGENT_TOKEN:-}"
