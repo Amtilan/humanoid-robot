@@ -8,7 +8,11 @@ from dataclasses import dataclass
 from humanoid_robot.domain.knowledge import KnowledgeChunk, RetrievalHit
 from humanoid_robot.domain.voice import Language
 from humanoid_robot.ports import LlmRequest, LlmResponse, RetrievalQuery
-from humanoid_robot.rag.conversation import ConversationConfig, ConversationOrchestrator
+from humanoid_robot.rag.conversation import (
+    ConversationConfig,
+    ConversationOrchestrator,
+    trim_incomplete_tail,
+)
 
 
 @dataclass
@@ -136,3 +140,23 @@ async def test_retrieve_false_skips_vector_store() -> None:
     assert store.searched is False
     assert result.answer is not None
     assert result.answer.answer  # still produced a chat reply
+
+
+class TestTrimIncompleteTail:
+    """Truncated answers are cut back to the last finished sentence."""
+
+    def test_complete_text_untouched(self) -> None:
+        assert trim_incomplete_tail("Привет! Как дела?") == "Привет! Как дела?"
+
+    def test_truncated_tail_dropped(self) -> None:
+        text = "Я робот Слуга. Я умею отвечать на вопросы и помога"
+        assert trim_incomplete_tail(text) == "Я робот Слуга."
+
+    def test_ellipsis_and_quotes_kept(self) -> None:
+        assert trim_incomplete_tail("Он сказал: «Привет.» И ушё") == "Он сказал: «Привет.»"
+
+    def test_no_finished_sentence_kept_as_is(self) -> None:
+        assert trim_incomplete_tail("Половина ответа без точки") == "Половина ответа без точки"
+
+    def test_empty(self) -> None:
+        assert trim_incomplete_tail("   ") == ""

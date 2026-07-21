@@ -61,10 +61,12 @@ class ConversationConfig(BaseModel):
         "Тебя зовут Слуга. Ты — дружелюбный человекоподобный робот-помощник "
         "(Unitree G1). Ты живой, стоишь на ногах и общаешься голосом. К тебе "
         "обращаются по имени — Слуга. Это разговор вслух: отвечай ОЧЕНЬ коротко "
-        "и естественно, обычно одним-двумя предложениями, без списков и "
-        "вступлений. Если ниже дан релевантный контекст из базы знаний, "
-        "используй его; если нет — просто поболтай, опираясь на свои знания. Не "
-        "выдумывай конкретные факты о документах, которых тебе не давали."
+        "и естественно, не больше двух-трёх коротких предложений, без списков и "
+        "вступлений. Всегда заканчивай ответ полным предложением — никогда не "
+        "обрывай мысль на середине. Если ниже дан релевантный контекст из базы "
+        "знаний, используй его; если нет — просто поболтай, опираясь на свои "
+        "знания. Не выдумывай конкретные факты о документах, которых тебе не "
+        "давали."
     )
     system_prompt_en: str = (
         "Your name is Sluga (Слуга). You are a friendly humanoid helper robot "
@@ -81,6 +83,32 @@ class ConversationConfig(BaseModel):
 # inflating prefill (llama.cpp caches the common prefix, so the cost of old
 # turns is paid once).
 _HISTORY_MAX_TURNS = 6
+
+_SENTENCE_END_CHARS = ".!?…"
+_CLOSING_CHARS = "»\")]'"
+
+
+def trim_incomplete_tail(text: str) -> str:
+    """Cut a max_tokens-truncated answer back to its last finished sentence.
+
+    Spoken aloud, a mid-sentence cut sounds like the robot breaking off; the
+    chat shows the same trimmed text so voice and screen stay consistent.
+    Text with no finished sentence at all is returned as-is — half an answer
+    beats silence.
+    """
+    t = text.strip()
+    if not t:
+        return t
+    core = t.rstrip(_CLOSING_CHARS)
+    if core and core[-1] in _SENTENCE_END_CHARS:
+        return t
+    for i in range(len(core) - 1, -1, -1):
+        if core[i] in _SENTENCE_END_CHARS:
+            end = i + 1
+            while end < len(t) and t[end] in _CLOSING_CHARS:
+                end += 1
+            return t[:end].strip()
+    return t
 
 
 @dataclass(slots=True)
@@ -124,7 +152,7 @@ class ConversationOrchestrator:
             fallback = self._fallback(language)
             yield fallback
             return
-        self._remember(question, "".join(parts).strip())
+        self._remember(question, trim_incomplete_tail("".join(parts)))
 
     async def answer(self, question: str, language: Language) -> GroundedQAResult:
         hits = await self._retrieve(question)
@@ -138,7 +166,7 @@ class ConversationOrchestrator:
             max_tokens=self.config.max_tokens,
         )
         response = await self.llm.generate(request)
-        text = response.text.strip() or self._fallback(language)
+        text = trim_incomplete_tail(response.text) or self._fallback(language)
         if response.text.strip():
             self._remember(question, text)
         answer = GroundedAnswer(

@@ -36,11 +36,11 @@ conversation:
   # 0.7 let Qwen-7B-q5 drift (mid-sentence language switches); 0.4 keeps spoken
   # replies coherent and on-language.
   temperature: 0.4
-  # Spoken chat: keep replies short but leave room to FINISH the sentence —
-  # a hard cut mid-sentence sounds like the robot breaking off. The 3B model
-  # streams ~22 tok/s, and the TTS drops an unpunctuated truncated tail, so
-  # 120 is a comfortable ceiling for the 1-2 sentence persona.
-  max_tokens: 120
+  # Spoken chat: the persona asks for 2-3 short sentences; 220 leaves cloud
+  # models (more verbose than the local 3B) room to FINISH the last sentence.
+  # If the cap still hits, rag trims the answer to the last finished sentence
+  # so voice and chat never end mid-word.
+  max_tokens: 220
   # Persona override (unset = the default "Слуга" robot persona). Only the
   # conversational rules apply — the robot's LLM has no tools, so any
   # tool/booking actions in a prompt are role-play only. To switch the robot

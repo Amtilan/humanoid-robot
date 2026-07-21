@@ -23,6 +23,7 @@ from humanoid_robot.events import AsrFinal, BaseEvent, LlmAnswer, LlmAnswerToken
 from humanoid_robot.events.base import EventMetadata
 from humanoid_robot.observability import get_logger
 from humanoid_robot.ports import EventBusPort, Subscription
+from humanoid_robot.rag.conversation import trim_incomplete_tail
 from humanoid_robot.rag.grounded_qa import GroundedQAResult
 
 _LOG = get_logger("cortex-rag.runner")
@@ -124,7 +125,9 @@ class RagRunner:
                 return
             # Partial answer survives — publish what we have so TTS finishes
             # the sentence rather than cutting to silence.
-        text = "".join(parts).strip()
+        # A max_tokens-truncated tail is cut to the last finished sentence so
+        # the chat text matches what TTS actually says out loud.
+        text = trim_incomplete_tail("".join(parts))
         if not text:
             await self._publish_rejected(event, reason="empty_answer", fallback_text=None)
             return
