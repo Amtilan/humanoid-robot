@@ -135,7 +135,7 @@ ignore = [
 "apps/rag/src/humanoid_robot/rag/visit_intake.py" = ["RUF001", "RUF002", "RUF003"]
 # Russian/Kazakh spoken lines and alias tables of the video-wall command matrix.
 "apps/rag/src/humanoid_robot/rag/wall_intent.py" = ["RUF001", "RUF002", "RUF003"]
-"apps/rag/tests/test_wall_intent.py" = ["RUF001"]
+"apps/rag/tests/test_wall_intent.py" = ["RUF001", "RUF002"]
 "apps/rag/src/humanoid_robot/rag/guard_kb.py" = ["RUF001", "RUF002", "RUF003"]
 "apps/rag/src/humanoid_robot/rag/runner.py" = ["RUF003"]
 "apps/rag/tests/test_visit_intake.py" = ["RUF001"]

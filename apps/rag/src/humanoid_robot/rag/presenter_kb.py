@@ -50,7 +50,12 @@ _ATTRS = ("length", "contractor", "deadline", "status")
 # Attribute keywords on the normalized (Kazakh-folded, lowercased) text.
 _ATTR_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("length", re.compile(r"протяжен|километр|длин|узынды|канша\s*км")),
-    ("contractor", re.compile(r"подрядчик|кто\s+строит|строител|мердигер|курылысшы|ким\s+салып")),
+    # «строител(?!ьств)»: слово «строительство» в вопросах о сроках не должно
+    # опознаваться как вопрос о подрядчике.
+    (
+        "contractor",
+        re.compile(r"подрядчик|кто\s+строит|строител(?!ьств)|мердигер|курылысшы|ким\s+салып"),
+    ),
     (
         "deadline",
         re.compile(

@@ -119,3 +119,21 @@ def test_config_overrides(tmp_path: object) -> None:
     assert match is not None
     assert match.command.section is WallSection.AVTO3
     assert match.speak == "Текст заказчика."
+
+
+def test_deadline_question_with_stroitelstvo_word() -> None:
+    """«Когда завершат строительство X?» — вопрос о сроке, не о подрядчике."""
+    from humanoid_robot.rag.presenter_kb import PresenterKb
+
+    kb = PresenterKb(
+        sections={
+            "JD3": {
+                "name_ru": "ЖД Бахты — Аягоз",
+                "contractor_ru": "CHEC",
+                "deadline_ru": "2027 год",
+            }
+        }
+    )
+    answer = kb.lookup("Когда завершат строительство ЖД Бахты Аягоз?")
+    assert answer is not None
+    assert "2027" in answer
