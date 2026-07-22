@@ -142,6 +142,9 @@ services:
       # Host net: core's published port is on loopback. Used to fetch the
       # app-configured AI backend (cloud transcription rides the same token).
       HR_VOICE_CORE_URL: "http://127.0.0.1:8080"
+      # Cloud TTS key for the Kazakh voice (Russian stays on local Piper).
+      # Set the value in /opt/humanoid-robot/.env on the robot — never in git.
+      HR_TTS_CLOUD_API_KEY: "${HR_TTS_CLOUD_API_KEY:-}"
     depends_on:
       nats:
         condition: service_healthy

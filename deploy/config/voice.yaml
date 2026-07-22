@@ -83,12 +83,27 @@ stack:
       # Prevents the repeat-hallucination loops on short utterances and trims
       # decode time.
       condition_on_previous_text: false
+  # Русский/английский — локальный Piper (быстро, офлайн). Казахского голоса
+  # у Piper НЕТ, поэтому казахская фраза автоматически уходит в облачный
+  # tts_fallback с нормальным казахским голосом.
   tts:
     name: piper
     config:
       voice_paths:
         ru: /var/lib/humanoid-robot/models/piper/ru_RU-irina-medium.onnx
         en: /var/lib/humanoid-robot/models/piper/en_US-lessac-medium.onnx
+  # Облачный синтез для казахского (ключ — в /opt/humanoid-robot/.env,
+  # HR_TTS_CLOUD_API_KEY; в git не хранится). gpt-4o-mini-tts, голос nova.
+  tts_fallback:
+    name: cloud
+    config:
+      base_url: https://api.openai.com
+      api_key_env: HR_TTS_CLOUD_API_KEY
+      model: gpt-4o-mini-tts
+      voices:
+        kk: nova
+        ru: nova
+        en: nova
   # Презентатор, этап 5: облачный синтез с казахским голосом. Раскомментировать,
   # перенести piper в tts_fallback (офлайн-резерв) и задать ключ в
   # /etc/humanoid-robot/cortex-voice.env (HR_TTS_CLOUD_API_KEY=...).
