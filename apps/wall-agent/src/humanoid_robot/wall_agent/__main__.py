@@ -19,9 +19,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--driver",
-        choices=["sim", "sendinput"],
+        choices=["sim", "pipe", "sendinput"],
         default="sim",
-        help="sim = in-memory simulator; sendinput = Windows input emulation",
+        help="sim = simulator; pipe = native named-pipe (recommended); sendinput = mouse/key emulation",
     )
     parser.add_argument("--host", default="0.0.0.0")  # noqa: S104  # pragma: allowlist secret
     parser.add_argument("--port", type=int, default=8093)

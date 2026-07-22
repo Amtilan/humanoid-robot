@@ -30,6 +30,40 @@ log = logging.getLogger(__name__)
 _MAIN_SCREEN = "Main"
 _MAX_SLIDE = 99
 
+# The MinTrans wall app (Factories.exe) ships a NATIVE command interface: a
+# Windows named pipe served by its V0PipeServer. Reverse-engineered from
+# Assembly-CSharp.dll: it ReadLineAsync()s a command name, matches it against
+# the scene's V0CommandExecute components, invokes that button's onClick, and
+# WriteLine()s back "OK"/"FAIL". This is the OFFICIAL control path — no mouse
+# clicks, no screen-coordinate calibration. Section Avto5 has NO MENU_ command
+# in the scene, so it is not reachable this way (documented below).
+_PIPE_NAME = "S.Networks.Pipes.Unity.MinTrans"
+
+_SECTION_TO_MENU: dict[WallSection, str] = {
+    WallSection.AVTO1: "MENU_AVTO1",
+    WallSection.AVTO2: "MENU_AVTO2",
+    WallSection.AVTO3: "MENU_AVTO3",
+    WallSection.AVTO4: "MENU_AVTO4",
+    # Avto5 intentionally absent: the wall app defines no MENU_AVTO5.
+    WallSection.JD1: "MENU_JD1",
+    WallSection.JD2: "MENU_JD2",
+    WallSection.JD3: "MENU_JD3",
+    WallSection.AERO1: "MENU_AERO1",
+    WallSection.AERO2: "MENU_AERO2",
+    WallSection.AERO3: "MENU_AERO3",
+    WallSection.AERO4: "MENU_AERO4",
+}
+
+_NAV_TO_MENU: dict[WallNavAction, str] = {
+    WallNavAction.MAIN_MENU: "MENU_MAIN",
+    # next/prev slide have no MENU_ command — the app pages slides by PgDn/PgUp;
+    # those stay on the sendinput driver. Category jumps map to the group menu.
+}
+
+# Category-level menus for next/prev_section fallbacks are handled by opening
+# the group screen; kept here for completeness.
+_CATEGORY_MENU = {"avto": "MENU_AVTO", "jd": "MENU_JD", "aero": "MENU_AERO"}
+
 
 class WallDriver(Protocol):
     """A backend that executes wall commands."""
@@ -255,10 +289,87 @@ class SendInputWallDriver:
             return {"screen": self._screen, "slide": None, "exact": False}
 
 
+class PipeWallDriver:
+    """Drives the real wall app through its native named-pipe command server.
+
+    This is the app's OWN interface (V0PipeServer), so there is no calibration
+    and no window focus juggling: connect, send ``MENU_AERO1\\n``, read the
+    ``OK``/``FAIL`` line back. A fresh connection per command matches the
+    server, which accepts one client, handles it, and loops back to listen.
+    """
+
+    name = "pipe"
+
+    def __init__(self, pipe_name: str = _PIPE_NAME, *, timeout_s: float = 5.0) -> None:
+        self._pipe_path = rf"\\.\pipe\{pipe_name}"
+        self._timeout_s = timeout_s
+        self._lock = threading.Lock()
+        self._screen = "unknown"
+
+    def _send(self, command_name: str) -> tuple[bool, str]:  # pragma: no cover — Windows I/O
+        # Line-oriented UTF-8, matching the app's StreamReader/StreamWriter
+        # (ReadLineAsync / WriteLine, AutoFlush=true).
+        deadline = time.monotonic() + self._timeout_s
+        last_err = "pipe not available"
+        while time.monotonic() < deadline:
+            try:
+                with open(self._pipe_path, "r+b", buffering=0) as pipe:
+                    pipe.write((command_name + "\n").encode("utf-8"))
+                    reply = pipe.readline().decode("utf-8", "replace").strip()
+                    return reply.upper() == "OK", reply or "(no reply)"
+            except OSError as exc:  # pipe busy / not yet created — retry briefly
+                last_err = str(exc)
+                time.sleep(0.1)
+        return False, last_err
+
+    def execute(self, command: WallCommand) -> WallCommandResult:
+        if command.kind is WallCommandKind.OPEN_SECTION and command.section:
+            menu = _SECTION_TO_MENU.get(command.section)
+            if menu is None:
+                return WallCommandResult(
+                    outcome=WallCommandOutcome.REJECTED,
+                    detail=f"section {command.section.value} has no wall command",
+                )
+        elif command.nav is not None:
+            menu = _NAV_TO_MENU.get(command.nav)
+            if menu is None:
+                return WallCommandResult(
+                    outcome=WallCommandOutcome.REJECTED,
+                    detail=f"nav {command.nav.value} not supported over pipe (use sendinput)",
+                )
+        else:  # pragma: no cover — validated model
+            return WallCommandResult(outcome=WallCommandOutcome.REJECTED, detail="empty command")
+
+        with self._lock:
+            ok, reply = self._send(menu)
+        if ok:
+            if command.section:
+                self._screen = command.section.value
+            elif command.nav is WallNavAction.MAIN_MENU:
+                self._screen = _MAIN_SCREEN
+            log.info("pipe: %s -> OK", menu)
+            return WallCommandResult(outcome=WallCommandOutcome.ACCEPTED)
+        log.warning("pipe: %s -> %s", menu, reply)
+        # A reply that isn't "OK" means the app rejected the command; no reply
+        # at all means the pipe/app was unreachable.
+        outcome = (
+            WallCommandOutcome.UNREACHABLE
+            if reply == "pipe not available" or "reply" in reply
+            else WallCommandOutcome.REJECTED
+        )
+        return WallCommandResult(outcome=outcome, detail=reply)
+
+    def state(self) -> dict[str, Any]:
+        with self._lock:
+            return {"screen": self._screen, "slide": None, "exact": False}
+
+
 def build_driver(name: str, *, mapping_path: str | None = None) -> WallDriver:
     """Factory used by the CLI entrypoint."""
     if name == "sim":
         return SimWallDriver()
+    if name == "pipe":
+        return PipeWallDriver()
     if name == "sendinput":
         if not mapping_path:
             msg = "sendinput driver requires --mapping <file.json>"
